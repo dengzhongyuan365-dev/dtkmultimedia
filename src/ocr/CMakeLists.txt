@@ -17,6 +17,16 @@ find_package(PkgConfig REQUIRED)
 
 set(TARGET_LIBS Qt${QT_VERSION_MAJOR}::Gui)
 
+# 添加C API头文件到安装列表
+list(APPEND INSTALL_INCLUDE_FILES "interface/docr_c_api.h")
+
+# 设置符号可见性控制
+set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -fvisibility=hidden -fvisibility-inlines-hidden")
+set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -fvisibility=hidden")
+
+# 启用符号版本控制
+set(VERSION_SCRIPT_PATH "${CMAKE_CURRENT_SOURCE_DIR}/libdtk6ocr.map")
+
 add_library(${BIN_NAME} SHARED
     ${INSTALL_INCLUDE_FILES}
     ${INCLUDE_FILES}
@@ -35,9 +45,15 @@ endif()
 
 set_target_properties(${BIN_NAME} PROPERTIES
     VERSION ${CMAKE_PROJECT_VERSION}
-    SOVERSION ${CMAKE_PROJECT_VERSION_MAJOR})
+    SOVERSION ${CMAKE_PROJECT_VERSION_MAJOR}
+    # 添加符号版本脚本
+    LINK_FLAGS "-Wl,--version-script=${VERSION_SCRIPT_PATH}")
 
-target_compile_definitions(${BIN_NAME} PRIVATE VERSION="${CMAKE_PROJECT_VERSION}")
+target_compile_definitions(${BIN_NAME} PRIVATE 
+    VERSION="${CMAKE_PROJECT_VERSION}"
+    BUILDING_DTKOCR
+    # 确保符号可见性宏正确工作
+    DTKOCR_BUILD_SHARED)
 
 target_include_directories(${BIN_NAME} PUBLIC
     Qt${QT_VERSION_MAJOR}::Core
@@ -50,6 +66,9 @@ target_link_libraries(${BIN_NAME} PRIVATE
     ${TARGET_LIBS}
     ${InferenceEngine_LIBRARIES}
 )
+
+# 安装符号版本脚本（可选，用于调试）
+install(FILES ${VERSION_SCRIPT_PATH} DESTINATION ${CMAKE_INSTALL_LIBDIR}/pkgconfig OPTIONAL)
 
 install(FILES ${INSTALL_INCLUDE_FILES} DESTINATION ${CMAKE_INSTALL_INCLUDEDIR}/${BIN_NAME})
 install(TARGETS ${BIN_NAME} DESTINATION ${CMAKE_INSTALL_LIBDIR})

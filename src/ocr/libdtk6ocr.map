@@ -1,0 +1,43 @@
+DTK6OCR_1.0 {
+    global:
+        # C API 函数 - 基础操作
+        ocr_create;
+        ocr_destroy;
+        ocr_load_default_plugin;
+        ocr_plugin_ready;
+        
+        # C API 函数 - 硬件配置
+        ocr_set_hardware;
+        ocr_set_max_threads;
+        
+        # C API 函数 - 语言设置
+        ocr_set_language;
+        
+        # C API 函数 - 图像设置
+        ocr_set_image_file;
+        ocr_set_image_data;
+        
+        # C API 函数 - 识别操作
+        ocr_analyze;
+        ocr_break_analyze;
+        ocr_is_running;
+        
+        # C API 函数 - 结果获取
+        ocr_get_simple_result;
+        ocr_get_text_boxes;
+        ocr_free_text_boxes;
+        
+        # C API 函数 - 版本信息
+        ocr_get_version;
+        ocr_get_api_version_major;
+        ocr_get_api_version_minor;
+        ocr_get_api_version_patch;
+        
+    local:
+        # 隐藏所有其他符号，包括：
+        # - ClipperLib内部符号
+        # - DOcr/DOcrPrivate C++类符号
+        # - Qt模板实例化符号
+        # - 内部工具函数
+        *;
+}; 
