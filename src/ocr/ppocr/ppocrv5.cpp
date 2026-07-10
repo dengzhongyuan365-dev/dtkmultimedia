@@ -1,4 +1,4 @@
-// SPDX-FileCopyrightText: 2022 UnionTech Software Technology Co., Ltd.
+// SPDX-FileCopyrightText: 2022-2026 UnionTech Software Technology Co., Ltd.
 //
 // SPDX-License-Identifier: LGPL-3.0-or-later
 
@@ -264,16 +264,49 @@ std::pair<std::string, std::vector<int>> PaddleOCRAppV5::ctcDecode(const std::ve
     return std::make_pair(text, baseSize);
 }
 
+QList<Dtk::Ocr::TextBox>
+PaddleOCRAppV5::lengthToBox(const std::vector<int> &lengths, QPointF basePoint, float rectHeight, float ratio)
+{
+    QList<Dtk::Ocr::TextBox> result;
+    if (ratio <= 0.0f) {
+        return result;
+    }
+
+    float currentPos = basePoint.x();
+    const float yAxisT = basePoint.y();
+    const float yAxisB = basePoint.y() + rectHeight;
+    for (auto eachLen : lengths) {
+        Dtk::Ocr::TextBox temp;
+        temp.angle = 0;
+        temp.points.push_back(QPointF(currentPos, yAxisT));
+        temp.points.push_back(QPointF(currentPos + eachLen * 4 / ratio, yAxisT));
+        temp.points.push_back(QPointF(currentPos + eachLen * 4 / ratio, yAxisB));
+        temp.points.push_back(QPointF(currentPos, yAxisB));
+        result.push_back(temp);
+        currentPos += eachLen * 4 / ratio;
+    }
+    return result;
+}
+
 void PaddleOCRAppV5::rec(const std::vector<cv::Mat> &detectImg)
 {
     size_t size = detectImg.size();
     allResult.clear();
     std::vector<std::string> allResultVec(detectImg.size());
     boxesResult.resize(size);
+    allCharBoxes.resize(static_cast<int>(size));
 
 #pragma omp parallel for num_threads(maxThreadsUsed)
     for (size_t i = 0; i < size; ++i) {
         if (needBreak) {
+            continue;
+        }
+
+        const int index = static_cast<int>(i);
+        if (detectImg[i].empty() || detectImg[i].cols <= 0 || detectImg[i].rows <= 0) {
+            continue;
+        }
+        if (index < 0 || index >= allTextBoxes.size() || allTextBoxes[index].points.size() < 3) {
             continue;
         }
 
@@ -297,6 +330,10 @@ void PaddleOCRAppV5::rec(const std::vector<cv::Mat> &detectImg)
             }
             // Fill in 127, which is approximately equal to fill in 0 after being processed by subtract_cean_normalization
             cv::copyMakeBorder(stdMat, stdMat, 0, 0, 0, int(imgW - stdMat.cols), cv::BORDER_CONSTANT, {127, 127, 127});
+        }
+        const float realRatio = static_cast<float>(stdMat.cols) / detectImg[index].cols;
+        if (realRatio <= 0.0f) {
+            continue;
         }
         if (needBreak) {
             continue;
@@ -327,14 +364,15 @@ void PaddleOCRAppV5::rec(const std::vector<cv::Mat> &detectImg)
         std::vector<float> recNetOutputData(floatArray, floatArray + out.h * out.w);
 
         auto ctcResult = ctcDecode(recNetOutputData, out.h, out.w);
-        auto baseSize = ctcResult.second;
-        auto box = allTextBoxes[i];
-
-        // v5 is not support char boxes
+        const auto &baseSize = ctcResult.second;
+        const auto &box = allTextBoxes[index];
+        const float rectHeight = box.points[2].y() - box.points[0].y();
+        const auto currentCharBox = lengthToBox(baseSize, box.points[0], rectHeight, realRatio);
 #pragma omp critical
         {
             allResultVec[i] = ctcResult.first;
-            boxesResult[i] = ctcResult.first.c_str();
+            boxesResult[index] = ctcResult.first.c_str();
+            allCharBoxes[index] = currentCharBox;
         }
 
         if (needBreak) {
@@ -506,6 +544,7 @@ bool PaddleOCRAppV5::analyze()
 
     if (needBreak) {
         allTextBoxes.clear();
+        allCharBoxes.clear();
         allResult.clear();
         boxesResult.clear();
         needBreak = false;
@@ -517,6 +556,7 @@ bool PaddleOCRAppV5::analyze()
             if (boxesResult[i].isEmpty()) {
                 boxesResult.removeAt(i);
                 allTextBoxes.removeAt(i);
+                allCharBoxes.removeAt(i);
                 --i;
             }
         }
@@ -557,8 +597,10 @@ QList<Dtk::Ocr::TextBox> PaddleOCRAppV5::textBoxes() const
 
 QList<Dtk::Ocr::TextBox> PaddleOCRAppV5::charBoxes(int index) const
 {
-    Q_UNUSED(index)
-    return {};
+    if (index < 0 || index >= allCharBoxes.size()) {
+        return {};
+    }
+    return allCharBoxes.at(index);
 }
 
 QString PaddleOCRAppV5::simpleResult() const
