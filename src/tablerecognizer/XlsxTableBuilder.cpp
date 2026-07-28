@@ -36,7 +36,7 @@ QString XlsxTableBuilder::build(const QList<DTableCell> &cells, const QString &o
     lxw_format *format = workbook_add_format(workbook);
     format_set_border(format, LXW_BORDER_THIN);
     format_set_align(format, LXW_ALIGN_LEFT);
-    format_set_valign(format, LXW_ALIGN_VERTICAL_TOP);
+    format_set_align(format, LXW_ALIGN_VERTICAL_TOP);
 
     bool ok = true;
     for (const DTableCell &cell : cells) {

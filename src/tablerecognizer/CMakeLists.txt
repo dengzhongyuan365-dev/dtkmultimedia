@@ -12,7 +12,7 @@ file(GLOB_RECURSE SRCS
 )
 include_directories(../../include/dtktablerecognizer)
 
-find_package(Qt${QT_VERSION_MAJOR}Gui)
+find_package(Qt${QT_VERSION_MAJOR} COMPONENTS Gui Concurrent)
 find_package(PkgConfig REQUIRED)
 
 # 主依赖：onnxruntime（结构推理）、libxlsxwriter（Excel 输出）、opencv_mobile（降级/预处理）。
@@ -61,6 +61,7 @@ target_include_directories(${BIN_NAME} PRIVATE ${CMAKE_CURRENT_LIST_DIR}/../../i
 target_link_libraries(${BIN_NAME} PRIVATE
     Qt${QT_VERSION_MAJOR}::Core
     Qt${QT_VERSION_MAJOR}::Gui
+    Qt${QT_VERSION_MAJOR}::Concurrent
     dtk${DTK_VERSION_MAJOR}ocr
     ${TARGET_LIBS}
 )
