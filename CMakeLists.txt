@@ -75,10 +75,14 @@ if (CMAKE_BUILD_TYPE STREQUAL "Debug")
     add_subdirectory(examples/screenRecorder)
     add_subdirectory(examples/screenShot)
     add_subdirectory(examples/ocrCmd)
-    add_subdirectory(examples/tablerecognizerCmd)
     add_subdirectory(examples/ocrDebugger)
     add_subdirectory(examples/mideaConvertAndInfo)
 endif ()
+
+# 仅在库目标存在（依赖齐全）时构建 tablerecognizerCmd 示例。
+if (TARGET dtk${DTK_VERSION_MAJOR}tablerecognizer)
+    add_subdirectory(examples/tablerecognizerCmd)
+endif()
 
 if (BUILD_DOCS STREQUAL ON)
     find_package(Doxygen)

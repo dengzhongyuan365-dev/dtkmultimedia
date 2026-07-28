@@ -39,7 +39,7 @@ include_directories(../src/ocr/ppocr)
 
 # tablerecognizer 测试依赖 onnxruntime/xlsxwriter/opencv_mobile dev 包；缺包时跳过相关源码与测试，
 # 避免拖垮既有测试构建（见详细设计 §9.4）。
-pkg_check_modules(TABLEREC IMPORTED_TARGET onnxruntime xlsxwriter opencv_mobile)
+pkg_check_modules(TABLEREC IMPORTED_TARGET libonnxruntime xlsxwriter opencv_mobile)
 if(TABLEREC_FOUND)
     file(GLOB_RECURSE TABLEREC_SRCS
         "../src/tablerecognizer/*.h"

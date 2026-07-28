@@ -20,7 +20,7 @@ find_package(PkgConfig REQUIRED)
 # 缺包时跳过本库构建并提示，避免在尚未预装 dev 包的开发/CI 环境拖垮整体配置
 # （见详细设计 §9.4；待 Phase 0 确认三架构 dev 包就绪后可改回 REQUIRED）。
 pkg_check_modules(OpenCVMobile IMPORTED_TARGET opencv_mobile)
-pkg_check_modules(ORT IMPORTED_TARGET onnxruntime)
+pkg_check_modules(ORT IMPORTED_TARGET libonnxruntime)
 pkg_check_modules(XlsxWriter IMPORTED_TARGET xlsxwriter)
 if(NOT (ORT_FOUND AND XlsxWriter_FOUND AND OpenCVMobile_FOUND))
     message(STATUS
