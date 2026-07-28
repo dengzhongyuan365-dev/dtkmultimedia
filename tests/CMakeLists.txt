@@ -47,7 +47,6 @@ if(TABLEREC_FOUND)
     list(APPEND SRCS ${TABLEREC_SRCS})
     include_directories("../src/tablerecognizer")
     include_directories("../include/dtktablerecognizer")
-    list(APPEND TARGET_LIBS PkgConfig::TABLEREC)
 else()
     list(FILTER TEST_FILES EXCLUDE REGEX
         "ut_celltextmapper|ut_htmltablebuilder|ut_xlsxtablebuilder|ut_ortinferenceengine|ut_tablestructuredetector|ut_img2tablefallback|ut_dtablerecognizer")
@@ -100,6 +99,10 @@ set(TARGET_LIBS Xtst
 # 仅在Qt6时链接OpenGLWidgets
 if(${QT_VERSION_MAJOR} EQUAL 6)
     list(APPEND TARGET_LIBS Qt${QT_VERSION_MAJOR}::OpenGLWidgets)
+endif()
+# tablerecognizer 依赖须在 set(TARGET_LIBS) 之后追加，否则被整体覆盖（见 AI 初审 Medium 项）。
+if(TABLEREC_FOUND)
+    list(APPEND TARGET_LIBS PkgConfig::TABLEREC)
 endif()
 
 list(APPEND PROJECT_INCLUDE /usr/include/glib-2.0 /usr/include/gstreamer-1.0)

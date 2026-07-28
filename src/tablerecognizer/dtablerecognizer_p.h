@@ -9,6 +9,8 @@
 #include "dtablerecognizer_global.h"
 
 #include <QAtomicInt>
+#include <QFuture>
+#include <QFutureWatcher>
 #include <QImage>
 #include <QObject>
 #include <QScopedPointer>
@@ -48,6 +50,8 @@ public:
     QString xlsxOutputPath;
     QAtomicInt timedOut{0};
     QAtomicInt emitted{0};
+    QAtomicInt busy{0};             // 单飞守卫（0=Idle, 1=Running）
+    QFutureWatcher<void> watcher;   // 析构时等待在途任务完成
 
     Q_DISABLE_COPY(DTableRecognizerPrivate)
     Q_DECLARE_PUBLIC(DTableRecognizer)

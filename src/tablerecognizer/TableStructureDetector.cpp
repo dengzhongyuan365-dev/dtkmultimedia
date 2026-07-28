@@ -172,9 +172,9 @@ std::vector<float> TableStructureDetector::preprocess(const QImage &image, int i
             const float r = line[base] / 255.0f;
             const float g = line[base + 1] / 255.0f;
             const float b = line[base + 2] / 255.0f;
-            tensor[x * inputSize + y] = (r - mean[0]) / std[0];
-            tensor[planeSize + x * inputSize + y] = (g - mean[1]) / std[1];
-            tensor[2 * planeSize + x * inputSize + y] = (b - mean[2]) / std[2];
+            tensor[y * inputSize + x] = (r - mean[0]) / std[0];
+            tensor[planeSize + y * inputSize + x] = (g - mean[1]) / std[1];
+            tensor[2 * planeSize + y * inputSize + x] = (b - mean[2]) / std[2];
         }
     }
     return tensor;

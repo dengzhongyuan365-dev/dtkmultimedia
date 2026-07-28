@@ -98,12 +98,21 @@ std::vector<std::vector<float>> OrtInferenceEngine::run(const std::vector<float>
             memoryInfo, const_cast<float *>(input.data()), input.size(),
             inputShape.data(), inputShape.size());
 
+        // 持久保存 QByteArray，保证 Run 调用期间 const char* 缓冲存活，避免悬垂指针。
+        std::vector<QByteArray> inUtf8;
         std::vector<const char *> inNames;
-        for (const QString &n : d->inputNames)
-            inNames.push_back(n.toUtf8().constData());
+        inUtf8.reserve(d->inputNames.size());
+        for (const QString &n : d->inputNames) {
+            inUtf8.push_back(n.toUtf8());
+            inNames.push_back(inUtf8.back().constData());
+        }
+        std::vector<QByteArray> outUtf8;
         std::vector<const char *> outNames;
-        for (const QString &n : d->outputNames)
-            outNames.push_back(n.toUtf8().constData());
+        outUtf8.reserve(d->outputNames.size());
+        for (const QString &n : d->outputNames) {
+            outUtf8.push_back(n.toUtf8());
+            outNames.push_back(outUtf8.back().constData());
+        }
 
         auto outputTensors = d->session->Run(Ort::RunOptions{nullptr}, inNames.data(),
                                              &inputTensor, 1, outNames.data(), outNames.size());

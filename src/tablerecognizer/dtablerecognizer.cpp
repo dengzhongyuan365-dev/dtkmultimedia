@@ -48,7 +48,13 @@ DTableRecognizer::DTableRecognizer(QObject *parent)
     d->detector.reset(new TableStructureDetector(d->ortEngine.data()));
 }
 
-DTableRecognizer::~DTableRecognizer() = default;
+DTableRecognizer::~DTableRecognizer()
+{
+    Q_D(DTableRecognizer);
+    // 析构期保护：等待在途识别任务完成，避免工作线程访问已释放的 this。
+    if (d->watcher.isRunning())
+        d->watcher.waitForFinished();
+}
 
 void DTableRecognizer::setXlsxOutputPath(const QString &path)
 {
@@ -82,6 +88,15 @@ void DTableRecognizerPrivate::start(const QImage &image, std::chrono::millisecon
         return;
     }
 
+    // 单飞守卫：Idle→Running，并发调用直接拒绝。
+    if (!busy.testAndSetAcquire(0, 1)) {
+        DTableResult result;
+        result.success = false;
+        result.errorMessage = QStringLiteral("已有识别任务在执行");
+        emitResult(result);
+        return;
+    }
+
     timedOut.storeRelease(0);
     emitted.storeRelease(0);
 
@@ -97,19 +112,23 @@ void DTableRecognizerPrivate::start(const QImage &image, std::chrono::millisecon
             result.success = false;
             result.errorMessage = QStringLiteral("识别超时");
             Q_Q(DTableRecognizer);
-            QMetaObject::invokeMethod(q, [this, result]() { emit q_ptr->recognitionDone(result); },
-                                      Qt::QueuedConnection);
+            QMetaObject::invokeMethod(q, [this, result]() {
+                busy.storeRelease(0);   // 回到 Idle。
+                emit q_ptr->recognitionDone(result);
+            }, Qt::QueuedConnection);
         }
     });
 
-    (void)QtConcurrent::run(QThreadPool::globalInstance(), [this, imageCopy, deadline, xlsx]() {
+    QFuture<void> future = QtConcurrent::run(QThreadPool::globalInstance(), [this, imageCopy, deadline, xlsx]() {
         DTableResult result = runPipeline(std::move(imageCopy), deadline, xlsx);
         Q_Q(DTableRecognizer);
         QMetaObject::invokeMethod(q, [this, result]() {
+            busy.storeRelease(0);   // 回到 Idle。
             if (emitted.testAndSetAcquire(0, 1))
                 emit q_ptr->recognitionDone(result);
         }, Qt::QueuedConnection);
     });
+    watcher.setFuture(future);
 }
 
 DTableResult DTableRecognizerPrivate::runPipeline(QImage image,
@@ -155,14 +174,14 @@ DTableResult DTableRecognizerPrivate::runPipeline(QImage image,
         return result;
     }
 
-    // 阶段2：OCR 文字识别。
+    // 阶段2：OCR 文字识别。按详细设计 §7.1，OCR 失败应置 success=false 并记录错误。
     QList<OcrTextBox> ocrBoxes;
-    if (ocr.recognize(image, ocrBoxes, error)) {
-        // 阶段3：将 OCR 文本框映射到单元格。
-        mapper.map(cells, ocrBoxes);
-    } else {
-        qCWarning(lcTableRecognizer) << "OCR failed:" << error;
+    if (!ocr.recognize(image, ocrBoxes, error)) {
+        result.errorMessage = QStringLiteral("OCR 失败：%1").arg(error);
+        return result;
     }
+    // 阶段3：将 OCR 文本框映射到单元格。
+    mapper.map(cells, ocrBoxes);
 
     // 转 public 数据结构。
     QList<DTableCell> publicCells;
@@ -198,6 +217,7 @@ DTableResult DTableRecognizerPrivate::runPipeline(QImage image,
 
 void DTableRecognizerPrivate::emitResult(const DTableResult &result)
 {
+    busy.storeRelease(0);   // 回到 Idle，允许下一次调用。
     if (emitted.testAndSetAcquire(0, 1)) {
         Q_Q(DTableRecognizer);
         QMetaObject::invokeMethod(q, [this, result]() { emit q_ptr->recognitionDone(result); },
