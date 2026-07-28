@@ -37,6 +37,23 @@ include_directories(../src/multimediawidgets/engine/plugin/ffmpeg)
 include_directories(../src/multimediawidgets/engine/plugin/gstreamer)
 include_directories(../src/ocr/ppocr)
 
+# tablerecognizer 测试依赖 onnxruntime/xlsxwriter/opencv_mobile dev 包；缺包时跳过相关源码与测试，
+# 避免拖垮既有测试构建（见详细设计 §9.4）。
+pkg_check_modules(TABLEREC IMPORTED_TARGET onnxruntime xlsxwriter opencv_mobile)
+if(TABLEREC_FOUND)
+    file(GLOB_RECURSE TABLEREC_SRCS
+        "../src/tablerecognizer/*.h"
+        "../src/tablerecognizer/*.cpp")
+    list(APPEND SRCS ${TABLEREC_SRCS})
+    include_directories("../src/tablerecognizer")
+    include_directories("../include/dtktablerecognizer")
+    list(APPEND TARGET_LIBS PkgConfig::TABLEREC)
+else()
+    list(FILTER TEST_FILES EXCLUDE REGEX
+        "ut_celltextmapper|ut_htmltablebuilder|ut_xlsxtablebuilder|ut_ortinferenceengine|ut_tablestructuredetector|ut_img2tablefallback|ut_dtablerecognizer")
+    message(STATUS "tablerecognizer tests skipped: onnxruntime/xlsxwriter dev packages not found")
+endif()
+
 add_executable(${BIN_NAME}
     ${INCLUDE_FILES}
     ${SRCS}
