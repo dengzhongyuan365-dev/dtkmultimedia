@@ -56,6 +56,8 @@ target_include_directories(${BIN_NAME} PUBLIC
 )
 
 # 复用 libdtk6ocr 公开 API（DOcr），不修改其源码。
+# dtk6ocr 目标未通过 INTERFACE_INCLUDE_DIRECTORIES 导出头文件路径，需显式添加。
+target_include_directories(${BIN_NAME} PRIVATE ${CMAKE_CURRENT_LIST_DIR}/../../include/dtkocr)
 target_link_libraries(${BIN_NAME} PRIVATE
     Qt${QT_VERSION_MAJOR}::Core
     Qt${QT_VERSION_MAJOR}::Gui
