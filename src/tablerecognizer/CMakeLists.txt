@@ -15,25 +15,27 @@ include_directories(../../include/dtktablerecognizer)
 find_package(Qt${QT_VERSION_MAJOR} COMPONENTS Gui Concurrent)
 find_package(PkgConfig REQUIRED)
 
-# 主依赖：onnxruntime（结构推理）、libxlsxwriter（Excel 输出）、opencv_mobile（降级/预处理）。
-# 详细设计要求 pkg_check_modules onnxruntime/xlsxwriter；此处先以 OPTIONAL 探测，
-# 缺包时跳过本库构建并提示，避免在尚未预装 dev 包的开发/CI 环境拖垮整体配置
-# （见详细设计 §9.4；待 Phase 0 确认三架构 dev 包就绪后可改回 REQUIRED）。
+# 主依赖：onnxruntime（结构推理）、opencv_mobile（降级/预处理）为必需；
+# libxlsxwriter（Excel 输出）为可选——缺失时库仍可构建，仅 Excel 输出不可用
+# （按队长决策：先使功能验证可推进，详见 V-566 评论）。
 pkg_check_modules(OpenCVMobile IMPORTED_TARGET opencv_mobile)
 pkg_check_modules(ORT IMPORTED_TARGET libonnxruntime)
 pkg_check_modules(XlsxWriter IMPORTED_TARGET xlsxwriter)
-if(NOT (ORT_FOUND AND XlsxWriter_FOUND AND OpenCVMobile_FOUND))
+if(NOT (ORT_FOUND AND OpenCVMobile_FOUND))
     message(STATUS
-        "libdtk${DTK_VERSION_MAJOR}tablerecognizer: skipped (onnxruntime/xlsxwriter/opencv_mobile dev not all found)")
+        "libdtk${DTK_VERSION_MAJOR}tablerecognizer: skipped (libonnxruntime/opencv_mobile dev not found)")
     return()
 endif()
 
 set(TARGET_LIBS
     Qt${QT_VERSION_MAJOR}::Gui
     PkgConfig::ORT
-    PkgConfig::XlsxWriter
     PkgConfig::OpenCVMobile
 )
+# xlsxwriter 可选：找到时启用 Excel 输出，缺失时 XlsxTableBuilder 降级返回空路径。
+if(XlsxWriter_FOUND)
+    list(APPEND TARGET_LIBS PkgConfig::XlsxWriter)
+endif()
 
 add_library(${BIN_NAME} SHARED
     ${INSTALL_INCLUDE_FILES}
@@ -49,6 +51,9 @@ target_compile_definitions(${BIN_NAME} PRIVATE
     VERSION="${CMAKE_PROJECT_VERSION}"
     DTK_BUILD_TABLERECOGNIZER_LIB
 )
+if(XlsxWriter_FOUND)
+    target_compile_definitions(${BIN_NAME} PRIVATE DTK_HAVE_XLSXWRITER)
+endif()
 
 target_include_directories(${BIN_NAME} PUBLIC
     Qt${QT_VERSION_MAJOR}::Core

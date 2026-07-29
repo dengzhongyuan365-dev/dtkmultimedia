@@ -4,12 +4,15 @@
 
 #include "XlsxTableBuilder.h"
 
+#ifdef DTK_HAVE_XLSXWRITER
 #include <xlsxwriter.h>
+#endif
 
 #include <QDateTime>
 #include <QDir>
 #include <QFile>
 #include <QFileInfo>
+#include <QtLogging>
 
 D_TABLERECOGNIZER_BEGIN_NAMESPACE
 
@@ -25,6 +28,13 @@ static QString resolveOutputPath(const QString &outPath)
 
 QString XlsxTableBuilder::build(const QList<DTableCell> &cells, const QString &outPath)
 {
+#ifndef DTK_HAVE_XLSXWRITER
+    Q_UNUSED(cells)
+    Q_UNUSED(outPath)
+    // libxlsxwriter 不可用：Excel 输出降级为空路径，不阻断整体识别流程。
+    qWarning("XlsxTableBuilder: libxlsxwriter not available, Excel output disabled");
+    return QString();
+#else
     const QString path = resolveOutputPath(outPath);
     const QByteArray pathBytes = path.toUtf8();
 
@@ -61,11 +71,11 @@ QString XlsxTableBuilder::build(const QList<DTableCell> &cells, const QString &o
 
     const lxw_error closeErr = workbook_close(workbook);
     if (closeErr != LXW_NO_ERROR || !ok) {
-        // 写入失败：删除可能产生的残缺文件，返回空。
         QFile::remove(path);
         return QString();
     }
     return path;
+#endif
 }
 
 D_TABLERECOGNIZER_END_NAMESPACE

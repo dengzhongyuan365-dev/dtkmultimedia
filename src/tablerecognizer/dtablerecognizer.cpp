@@ -200,15 +200,9 @@ DTableResult DTableRecognizerPrivate::runPipeline(QImage image,
     // 阶段4：构建 HTML。
     result.html = HtmlTableBuilder::build(publicCells);
 
-    // 阶段5：构建 Excel。
+    // 阶段5：构建 Excel。libxlsxwriter 为可选依赖，缺失时 xlsxPath 为空，
+    // 但不影响 HTML/结构化单元格输出，整体识别仍视为成功。
     result.xlsxPath = XlsxTableBuilder::build(publicCells, xlsx);
-    if (result.xlsxPath.isEmpty()) {
-        result.html.clear();
-        result.cells.clear();
-        result.source.clear();
-        result.errorMessage = QStringLiteral("Excel 输出失败");
-        return result;
-    }
 
     result.cells = publicCells;
     result.success = true;

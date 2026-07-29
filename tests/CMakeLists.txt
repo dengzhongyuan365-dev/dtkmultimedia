@@ -37,9 +37,10 @@ include_directories(../src/multimediawidgets/engine/plugin/ffmpeg)
 include_directories(../src/multimediawidgets/engine/plugin/gstreamer)
 include_directories(../src/ocr/ppocr)
 
-# tablerecognizer 测试依赖 onnxruntime/xlsxwriter/opencv_mobile dev 包；缺包时跳过相关源码与测试，
-# 避免拖垮既有测试构建（见详细设计 §9.4）。
-pkg_check_modules(TABLEREC IMPORTED_TARGET libonnxruntime xlsxwriter opencv_mobile)
+# tablerecognizer 测试硬依赖 libonnxruntime + opencv_mobile；libxlsxwriter 为可选
+# （缺失时 XlsxTableBuilder 降级为空路径，ut_xlsxtablebuilder 跳过）。
+pkg_check_modules(TABLEREC IMPORTED_TARGET libonnxruntime opencv_mobile)
+pkg_check_modules(TABLEREC_XLSX IMPORTED_TARGET xlsxwriter)
 if(TABLEREC_FOUND)
     file(GLOB_RECURSE TABLEREC_SRCS
         "../src/tablerecognizer/*.h"
@@ -47,10 +48,16 @@ if(TABLEREC_FOUND)
     list(APPEND SRCS ${TABLEREC_SRCS})
     include_directories("../src/tablerecognizer")
     include_directories("../include/dtktablerecognizer")
+    if(TABLEREC_XLSX_FOUND)
+        list(APPEND TARGET_LIBS PkgConfig::TABLEREC_XLSX)
+    else()
+        list(FILTER TEST_FILES EXCLUDE REGEX "ut_xlsxtablebuilder")
+        message(STATUS "ut_xlsxtablebuilder skipped: libxlsxwriter dev not found")
+    endif()
 else()
     list(FILTER TEST_FILES EXCLUDE REGEX
         "ut_celltextmapper|ut_htmltablebuilder|ut_xlsxtablebuilder|ut_ortinferenceengine|ut_tablestructuredetector|ut_img2tablefallback|ut_dtablerecognizer")
-    message(STATUS "tablerecognizer tests skipped: onnxruntime/xlsxwriter dev packages not found")
+    message(STATUS "tablerecognizer tests skipped: libonnxruntime/opencv_mobile dev packages not found")
 endif()
 
 add_executable(${BIN_NAME}
@@ -150,5 +157,10 @@ endif()
 set(ModelSaveSubDir dtkocrmodels)
 ADD_DEFINITIONS(-DOCR_MODEL_DIR="${CMAKE_CURRENT_LIST_DIR}/../src/ocr/${ModelSaveSubDir}/")
 add_subdirectory(ocrplugin)
+
+# tablerecognizer xlsxwriter 可选：找到时启用 Excel 输出编译路径。
+if(TABLEREC_FOUND AND TABLEREC_XLSX_FOUND)
+    target_compile_definitions(${BIN_NAME} PRIVATE DTK_HAVE_XLSXWRITER)
+endif()
 
 add_test(NAME ${BIN_NAME} COMMAND ${BIN_NAME})
