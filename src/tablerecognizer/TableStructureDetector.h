@@ -35,12 +35,14 @@ public:
     static std::vector<float> preprocess(const QImage &image, int inputSize);
 
     // 结构 token id 序列 + bbox 浮点序列 -> DetectedCell 列表。
-    // bbox 为 [x1,y1,x2,y2] 归一化坐标（0~1），按结构序列中单元格出现顺序排列。
+    // bboxStride 为每个单元格的浮点数个数（4 表示 [x1,y1,x2,y2]，
+    // 8 表示 4 个多边形顶点 [x1,y1,x2,y2,x3,y3,x4,y4]）。
     static QList<DetectedCell> decodeStructure(const std::vector<int> &structureIds,
                                                const std::vector<float> &bboxes,
-                                               const QSize &imageSize);
+                                               const QSize &imageSize,
+                                               int bboxStride = 4);
 
-    // 结构词表（代表性子集，覆盖 SLANet_plus 常用结构 token）。
+    // 结构词表（50 tokens，从 ONNX 模型元数据提取，与模型导出一致）。
     static QStringList vocabulary();
 
 private:

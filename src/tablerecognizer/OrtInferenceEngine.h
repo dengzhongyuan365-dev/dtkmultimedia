@@ -28,8 +28,10 @@ public:
 
     // 以 NCHW 单输入张量推理，返回每个输出节点的 float 序列。
     // inputShape 为输入张量形状（含 batch 维）。
+    // outShapes（可选）接收每个输出节点的张量形状。
     std::vector<std::vector<float>> run(const std::vector<float> &input,
-                                        const std::vector<int64_t> &inputShape);
+                                        const std::vector<int64_t> &inputShape,
+                                        std::vector<std::vector<int64_t>> *outShapes = nullptr);
 
     // 返回模型输入名称列表（loadModel 成功后有效）。
     QStringList inputNames() const;

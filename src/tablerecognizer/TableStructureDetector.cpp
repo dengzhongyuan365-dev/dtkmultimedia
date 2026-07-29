@@ -7,60 +7,77 @@
 #include "OrtInferenceEngine.h"
 
 #include <QDebug>
+#include <algorithm>
 #include <QMap>
-#include <QRegularExpression>
 #include <QString>
 
 D_TABLERECOGNIZER_BEGIN_NAMESPACE
 
 namespace {
 
-// SLANet_plus 结构词表（代表性子集，与 Python 参考实现一致）。
-// 索引即 token id；未列出的 id 视为普通文本/未知 token。
+// SLANet_plus 结构词表（50 tokens），从 ONNX 模型元数据 character 字段提取。
+// 索引即 token id；词表顺序与模型导出时一致。
 const QStringList &vocab()
 {
     static const QStringList v = {
-        QStringLiteral("<pad>"),      // 0
-        QStringLiteral("<sos>"),      // 1
-        QStringLiteral("<eos>"),      // 2
-        QStringLiteral("<table>"),    // 3
-        QStringLiteral("</table>"),   // 4
-        QStringLiteral("<thead>"),    // 5
-        QStringLiteral("</thead>"),   // 6
-        QStringLiteral("<tbody>"),    // 7
-        QStringLiteral("</tbody>"),   // 8
-        QStringLiteral("<tr>"),       // 9
-        QStringLiteral("</tr>"),      // 10
-        QStringLiteral("<td>"),       // 11 — 无属性单元格
-        QStringLiteral("<td"),        // 12 — 带 colspan/rowspan 的起始 token
-        QStringLiteral(">"),          // 13
-        QStringLiteral("</td>"),      // 14
-        QStringLiteral("colspan=\""), // 15
-        QStringLiteral("rowspan=\""), // 16
-        QStringLiteral("\""),         // 17
-        QStringLiteral(" "),          // 18
+        QStringLiteral("<sos>"),           // 0  — 序列起始
+        QStringLiteral("<eos>"),          // 1  — 序列结束
+        QStringLiteral("<thead>"),        // 2
+        QStringLiteral("</thead>"),       // 3
+        QStringLiteral("<tbody>"),        // 4
+        QStringLiteral("</tbody>"),       // 5
+        QStringLiteral("<tr>"),           // 6
+        QStringLiteral("</tr>"),          // 7
+        QStringLiteral("<td"),             // 8  — 单元格起始（无闭合 >）
+        QStringLiteral(">"),              // 9  — 闭合单元格属性
+        QStringLiteral("</td>"),          // 10
+        QStringLiteral(" colspan=\"2\""),  // 11
+        QStringLiteral(" colspan=\"3\""),  // 12
+        QStringLiteral(" colspan=\"4\""),  // 13
+        QStringLiteral(" colspan=\"5\""),  // 14
+        QStringLiteral(" colspan=\"6\""),  // 15
+        QStringLiteral(" colspan=\"7\""),  // 16
+        QStringLiteral(" colspan=\"8\""),  // 17
+        QStringLiteral(" colspan=\"9\""),  // 18
+        QStringLiteral(" colspan=\"10\""), // 19
+        QStringLiteral(" colspan=\"11\""), // 20
+        QStringLiteral(" colspan=\"12\""), // 21
+        QStringLiteral(" colspan=\"13\""), // 22
+        QStringLiteral(" colspan=\"14\""), // 23
+        QStringLiteral(" colspan=\"15\""), // 24
+        QStringLiteral(" colspan=\"16\""), // 25
+        QStringLiteral(" colspan=\"17\""), // 26
+        QStringLiteral(" colspan=\"18\""), // 27
+        QStringLiteral(" colspan=\"19\""), // 28
+        QStringLiteral(" colspan=\"20\""), // 29
+        QStringLiteral(" rowspan=\"2\""),  // 30
+        QStringLiteral(" rowspan=\"3\""),  // 31
+        QStringLiteral(" rowspan=\"4\""),  // 32
+        QStringLiteral(" rowspan=\"5\""),  // 33
+        QStringLiteral(" rowspan=\"6\""),  // 34
+        QStringLiteral(" rowspan=\"7\""),  // 35
+        QStringLiteral(" rowspan=\"8\""),  // 36
+        QStringLiteral(" rowspan=\"9\""),  // 37
+        QStringLiteral(" rowspan=\"10\""), // 38
+        QStringLiteral(" rowspan=\"11\""), // 39
+        QStringLiteral(" rowspan=\"12\""), // 40
+        QStringLiteral(" rowspan=\"13\""), // 41
+        QStringLiteral(" rowspan=\"14\""), // 42
+        QStringLiteral(" rowspan=\"15\""), // 43
+        QStringLiteral(" rowspan=\"16\""), // 44
+        QStringLiteral(" rowspan=\"17\""), // 45
+        QStringLiteral(" rowspan=\"18\""), // 46
+        QStringLiteral(" rowspan=\"19\""), // 47
+        QStringLiteral(" rowspan=\"20\""), // 48
+        QStringLiteral("<td></td>"),       // 49 — 自闭合空单元格
     };
     return v;
 }
 
-// 解析形如 "<td colspan=\"2\" rowspan=\"3\">" 的属性串，提取 span。
-void parseTdSpan(const QString &attrs, int &rowSpan, int &colSpan)
-{
-    rowSpan = 1;
-    colSpan = 1;
-    QRegularExpression reCol(QStringLiteral("colspan=\"(\\d+)\""));
-    QRegularExpression reRow(QStringLiteral("rowspan=\"(\\d+)\""));
-    QRegularExpressionMatch mCol = reCol.match(attrs);
-    QRegularExpressionMatch mRow = reRow.match(attrs);
-    if (mCol.hasMatch())
-        colSpan = mCol.captured(1).toInt();
-    if (mRow.hasMatch())
-        rowSpan = mRow.captured(1).toInt();
-    if (colSpan < 1)
-        colSpan = 1;
-    if (rowSpan < 1)
-        rowSpan = 1;
-}
+// colspan token id → span 值（id 11..29 → span 2..20）。
+inline int colspanFromId(int id) { return id - 9; }
+// rowspan token id → span 值（id 30..48 → span 2..20）。
+inline int rowspanFromId(int id) { return id - 28; }
 
 } // namespace
 
@@ -101,7 +118,8 @@ bool TableStructureDetector::detect(const QImage &image, QList<DetectedCell> &ce
     }
 
     const std::vector<int64_t> shape = {1, 3, kInputSize, kInputSize};
-    std::vector<std::vector<float>> outputs = m_engine->run(input, shape);
+    std::vector<std::vector<int64_t>> outShapes;
+    std::vector<std::vector<float>> outputs = m_engine->run(input, shape, &outShapes);
     if (outputs.empty()) {
         error = m_engine->lastError();
         if (error.isEmpty())
@@ -113,12 +131,48 @@ bool TableStructureDetector::detect(const QImage &image, QList<DetectedCell> &ce
         return false;
     }
 
-    // 结构 token：第一个输出，按 [T, V] 逐时间步 argmax。
-    const auto &structOut = outputs[0];
-    const int V = vocab().size();
+    // 模型有 2 个输出。SLANet_plus 导出顺序为 [bbox(8), structure(50)]，
+    // 但不能硬编码顺序——通过输出最后一维大小判断：V（词表）较大者为结构输出。
+    int structIdx = 1;
+    int bboxIdx = 0;
+    if (outShapes.size() >= 2) {
+        const int64_t v0 = outShapes[0].empty() ? 0 : outShapes[0].back();
+        const int64_t v1 = outShapes[1].empty() ? 0 : outShapes[1].back();
+        if (v0 > v1) {
+            structIdx = 0;
+            bboxIdx = 1;
+        }
+    }
+    const auto &structOut = outputs[structIdx];
+    const auto &bboxOut = outputs[bboxIdx];
+
+    // V 从结构输出的实际形状获取（最后一维）。
+    int V = 0;
+    size_t T = 0;
+    if (outShapes.size() > size_t(structIdx) && outShapes[structIdx].size() >= 2) {
+        V = static_cast<int>(outShapes[structIdx].back());
+        const int64_t total = static_cast<int64_t>(structOut.size());
+        if (V > 0 && total % V == 0)
+            T = total / V;
+    }
+    // 退回按词表大小推断。
+    if (V <= 0 || T == 0) {
+        V = vocab().size();
+        if (V > 0 && structOut.size() % size_t(V) == 0)
+            T = structOut.size() / size_t(V);
+    }
+
+    // bbox stride 从 bbox 输出形状获取（最后一维，通常 8）。
+    int bboxStride = 4;
+    if (outShapes.size() > size_t(bboxIdx) && outShapes[bboxIdx].size() >= 2) {
+        const int s = static_cast<int>(outShapes[bboxIdx].back());
+        if (s > 0)
+            bboxStride = s;
+    }
+
+    // 结构 token：按 [T, V] 逐时间步 argmax。
     std::vector<int> structIds;
-    if (V > 0 && structOut.size() % size_t(V) == 0) {
-        const size_t T = structOut.size() / size_t(V);
+    if (V > 0 && T > 0) {
         for (size_t t = 0; t < T; ++t) {
             const float *row = structOut.data() + t * V;
             int best = 0;
@@ -132,15 +186,31 @@ bool TableStructureDetector::detect(const QImage &image, QList<DetectedCell> &ce
             structIds.push_back(best);
         }
     } else {
-        // 退化：直接当作已 argmax 的 id 序列使用。
-        for (size_t t = 0; t < structOut.size(); ++t)
-            structIds.push_back(static_cast<int>(structOut[t]));
+        qWarning() << "TableStructureDetector: cannot determine V from output shape, "
+                   << "structOut size =" << structOut.size() << "V =" << V;
+        error = QStringLiteral("结构输出形状解析失败");
+        return false;
     }
 
-    const auto &bboxOut = outputs[1];
-    cells = decodeStructure(structIds, bboxOut, image.size());
+    // 遇到 <eos>（id=1）提前截断（SLANet 输出含填充）。
+    const int eosId = 1;
+    auto eosIt = std::find(structIds.begin(), structIds.end(), eosId);
+    if (eosIt != structIds.end())
+        structIds.erase(eosIt + 1, structIds.end());
+
+    cells = decodeStructure(structIds, bboxOut, image.size(), bboxStride);
     if (cells.isEmpty()) {
-        error = QStringLiteral("未识别到表格");
+        qWarning() << "TableStructureDetector: decodeStructure returned 0 cells."
+                   << "structIds count =" << structIds.size()
+                   << "bboxOut count =" << bboxOut.size()
+                   << "V =" << V << "T =" << T << "bboxStride =" << bboxStride
+                   << "structIdx =" << structIdx << "bboxIdx =" << bboxIdx;
+        // 打印前 30 个 token id 辅助排查。
+        QString idsStr;
+        for (size_t i = 0; i < structIds.size() && i < 30; ++i)
+            idsStr += QString::number(structIds[i]) + QLatin1Char(' ');
+        qWarning() << "TableStructureDetector: first 30 structIds:" << idsStr;
+        error = QStringLiteral("未识别到表格（结构解码无单元格）");
         return false;
     }
     return true;
@@ -182,10 +252,13 @@ std::vector<float> TableStructureDetector::preprocess(const QImage &image, int i
 
 QList<DetectedCell> TableStructureDetector::decodeStructure(const std::vector<int> &structureIds,
                                                             const std::vector<float> &bboxes,
-                                                            const QSize &imageSize)
+                                                            const QSize &imageSize,
+                                                            int bboxStride)
 {
     const QStringList &v = vocab();
     const int V = v.size();
+    if (bboxStride < 4)
+        bboxStride = 4;
 
     QList<DetectedCell> cells;
     int row = 0;
@@ -194,7 +267,8 @@ QList<DetectedCell> TableStructureDetector::decodeStructure(const std::vector<in
     QMap<int, int> spanRows;
     int cellIndex = 0;
     bool inTd = false;       // 正在累积 <td ...> 属性
-    QString attrBuf;
+    int pendingColSpan = 1;
+    int pendingRowSpan = 1;
 
     auto advanceRow = [&]() {
         // 行结束：递减各列的 rowspan 占用计数。
@@ -221,13 +295,21 @@ QList<DetectedCell> TableStructureDetector::decodeStructure(const std::vector<in
         cell.rowSpan = rowSpan;
         cell.colSpan = colSpan;
 
-        if (size_t(cellIndex + 1) * 4 <= bboxes.size()) {
-            const size_t bi = size_t(cellIndex) * 4;
-            const float x1 = bboxes[bi];
-            const float y1 = bboxes[bi + 1];
-            const float x2 = bboxes[bi + 2];
-            const float y2 = bboxes[bi + 3];
-            cell.bbox = QRectF(QPointF(x1, y1), QPointF(x2, y2));
+        if (size_t(cellIndex + 1) * size_t(bboxStride) <= bboxes.size()) {
+            const size_t bi = size_t(cellIndex) * size_t(bboxStride);
+            if (bboxStride >= 8) {
+                // 4 多边形顶点: (x1,y1),(x2,y2),(x3,y3),(x4,y4)
+                float xs[4] = {bboxes[bi], bboxes[bi + 2], bboxes[bi + 4], bboxes[bi + 6]};
+                float ys[4] = {bboxes[bi + 1], bboxes[bi + 3], bboxes[bi + 5], bboxes[bi + 7]};
+                const float xmin = *std::min_element(xs, xs + 4);
+                const float ymin = *std::min_element(ys, ys + 4);
+                const float xmax = *std::max_element(xs, xs + 4);
+                const float ymax = *std::max_element(ys, ys + 4);
+                cell.bbox = QRectF(QPointF(xmin, ymin), QPointF(xmax, ymax));
+            } else {
+                cell.bbox = QRectF(QPointF(bboxes[bi], bboxes[bi + 1]),
+                                   QPointF(bboxes[bi + 2], bboxes[bi + 3]));
+            }
         }
         cells.append(cell);
 
@@ -250,21 +332,22 @@ QList<DetectedCell> TableStructureDetector::decodeStructure(const std::vector<in
         if (inTd) {
             // 累积属性直到 ">" 闭合。
             if (tok == QStringLiteral(">")) {
-                int rowSpan = 1, colSpan = 1;
-                parseTdSpan(attrBuf, rowSpan, colSpan);
-                emitCell(rowSpan, colSpan);
-                attrBuf.clear();
+                emitCell(pendingRowSpan, pendingColSpan);
+                pendingColSpan = 1;
+                pendingRowSpan = 1;
                 inTd = false;
             } else if (tok == QStringLiteral("</td>")) {
-                // 容错：属性未闭合但遇到 </td>，按无属性单元格处理。
-                int rowSpan = 1, colSpan = 1;
-                if (!attrBuf.isEmpty())
-                    parseTdSpan(attrBuf, rowSpan, colSpan);
-                emitCell(rowSpan, colSpan);
-                attrBuf.clear();
+                // 容错：属性未闭合但遇到 </td>，按已收集属性闭合。
+                emitCell(pendingRowSpan, pendingColSpan);
+                pendingColSpan = 1;
+                pendingRowSpan = 1;
                 inTd = false;
-            } else {
-                attrBuf += tok;
+            } else if (id >= 11 && id <= 29) {
+                // colspan [REDACTED CREDENTIAL] = id - 9
+                pendingColSpan = colspanFromId(id);
+            } else if (id >= 30 && id <= 48) {
+                // rowspan [REDACTED CREDENTIAL] = id - 28
+                pendingRowSpan = rowspanFromId(id);
             }
             continue;
         }
@@ -273,20 +356,20 @@ QList<DetectedCell> TableStructureDetector::decodeStructure(const std::vector<in
             // 新行开始。
         } else if (tok == QStringLiteral("</tr>")) {
             advanceRow();
-        } else if (tok == QStringLiteral("<td>")) {
-            emitCell(1, 1);
         } else if (tok == QStringLiteral("<td")) {
             inTd = true;
-            attrBuf.clear();
+            pendingColSpan = 1;
+            pendingRowSpan = 1;
+        } else if (tok == QStringLiteral("<td></td>")) {
+            // 自闭合空单元格。
+            emitCell(1, 1);
         }
-        // 其它 token（<table>/<thead>/<tbody>/</td>/<pad>/<sos>/<eos> 等）忽略结构语义。
+        // 其它 token（<sos>/<eos>/<thead>/</thead>/<tbody>/</tbody>/</td>）忽略。
     }
 
     // 容错：流结束时仍在累积属性，按已收集属性闭合。
-    if (inTd && !attrBuf.isEmpty()) {
-        int rowSpan = 1, colSpan = 1;
-        parseTdSpan(attrBuf, rowSpan, colSpan);
-        emitCell(rowSpan, colSpan);
+    if (inTd) {
+        emitCell(pendingRowSpan, pendingColSpan);
     }
 
     // 归一化 bbox（0~1）缩放到原图尺寸。

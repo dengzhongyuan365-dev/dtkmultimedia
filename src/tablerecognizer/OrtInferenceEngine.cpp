@@ -49,8 +49,11 @@ bool OrtInferenceEngine::loadModel(const QString &modelPath)
     }
 
     try {
+        Ort::SessionOptions sessionOptions;
+        // 抑制 ONNX schema 重复注册的刷屏日志（ORT_LOGGING_LEVEL_FATAL=4）。
+        sessionOptions.SetLogSeverityLevel(4);
         d->session = std::make_unique<Ort::Session>(d->env, modelPath.toUtf8().constData(),
-                                                    Ort::SessionOptions{});
+                                                    sessionOptions);
         const size_t inCount = d->session->GetInputCount();
         for (size_t i = 0; i < inCount; ++i) {
             auto name = d->session->GetInputNameAllocated(i, d->allocator);
@@ -80,7 +83,8 @@ bool OrtInferenceEngine::isLoaded() const
 }
 
 std::vector<std::vector<float>> OrtInferenceEngine::run(const std::vector<float> &input,
-                                                        const std::vector<int64_t> &inputShape)
+                                                        const std::vector<int64_t> &inputShape,
+                                                        std::vector<std::vector<int64_t>> *outShapes)
 {
     std::vector<std::vector<float>> outputs;
     if (!isLoaded()) {
@@ -123,6 +127,8 @@ std::vector<std::vector<float>> OrtInferenceEngine::run(const std::vector<float>
             const size_t total = typeInfo.GetElementCount();
             const float *data = tensor.GetTensorData<float>();
             outputs.emplace_back(data, data + total);
+            if (outShapes)
+                outShapes->emplace_back(shape.begin(), shape.end());
         }
         d->lastError.clear();
     } catch (const Ort::Exception &e) {

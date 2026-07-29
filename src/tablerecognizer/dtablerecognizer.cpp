@@ -158,6 +158,12 @@ DTableResult DTableRecognizerPrivate::runPipeline(QImage image,
     bool structOk = false;
     if (detector && detector->available()) {
         structOk = detector->detect(image, cells, error);
+        if (!structOk)
+            qCWarning(lcTableRecognizer) << "Main path (SLANet_plus) detect failed:" << error
+                                          << "— falling back to img2table";
+    } else {
+        qCWarning(lcTableRecognizer) << "Main path unavailable (model not loaded)"
+                                      << "— falling back to img2table";
     }
     if (!structOk || cells.isEmpty()) {
         // 阶段1降级：img2table（OpenCV 有线表格）。
