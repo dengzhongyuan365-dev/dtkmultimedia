@@ -10,22 +10,22 @@
 D_TABLERECOGNIZER_USE_NAMESPACE
 
 // 词表索引（与 TableStructureDetector.cpp 内 vocab() 一致，从 ONNX 模型元数据提取）：
-// 0:<sos> 1:<eos> 2:<thead> 3:</thead> 4:<tbody> 5:</tbody>
-// 6:<tr> 7:</tr> 8:<td 9:> 10:</td>
-// 11..29: colspan="2" .. colspan="20"
-// 30..48: rowspan="2" .. rowspan="20"
-// 49: <td></td>
+// 0:<sos> 1:<thead> 2:</thead> 3:<tbody> 4:</tbody>
+// 5:<tr> 6:</tr> 7:<td 8:> 9:</td>
+// 10-28: colspan="2".."colspan="20"
+// 29-47: rowspan="2".."rowspan="20"
+// 48:<td></td> 49:<eos>
 static std::vector<int> ids(std::initializer_list<int> lst)
 {
     return std::vector<int>(lst);
 }
 
 // 解码一个 2x2 表格，验证行列。
-// 使用 <td >（id 8,9）表示普通单元格，stride=4 的 bbox。
+// <tbody><tr><td><td></tr><tr><td><td></tr></tbody>
 TEST(ut_TableStructureDetector, decodeSimpleGrid)
 {
-    // <tbody><tr><td><td></tr><tr><td><td></tr></tbody>
-    std::vector<int> structIds = ids({4, 6, 8, 9, 8, 9, 7, 6, 8, 9, 8, 9, 7, 5});
+    std::vector<int> structIds = ids({3, 5, 7, 8, 7, 8, 6, 5, 7, 8, 7, 8, 6, 4});
+    // 单元格按出现顺序的 bbox（4 值 = 4 个坐标，非按时间步）。
     std::vector<float> bboxes = {
         0.0f, 0.0f, 0.5f, 0.5f,
         0.5f, 0.0f, 1.0f, 0.5f,
@@ -33,7 +33,7 @@ TEST(ut_TableStructureDetector, decodeSimpleGrid)
         0.5f, 0.5f, 1.0f, 1.0f,
     };
 
-    QList<DetectedCell> cells = TableStructureDetector::decodeStructure(structIds, bboxes, QSize(100, 100));
+    QList<DetectedCell> cells = TableStructureDetector::decodeStructure(structIds, bboxes, QSize(100, 100), 4, false);
     ASSERT_EQ(cells.size(), 4);
     EXPECT_EQ(cells[0].row, 0);
     EXPECT_EQ(cells[0].col, 0);
@@ -47,58 +47,58 @@ TEST(ut_TableStructureDetector, decodeSimpleGrid)
     EXPECT_FLOAT_EQ(cells[3].bbox.right(), 100.0f);
 }
 
-// 使用 <td></td>（id 49）自闭合空单元格解码 1x2 表格。
+// 使用 <td></td>(48) 自闭合空单元格解码 1x2 表格。
 TEST(ut_TableStructureDetector, decodeSelfClosingCell)
 {
     // <tbody><tr><td></td><td></td></tr></tbody>
-    std::vector<int> structIds = ids({4, 6, 49, 49, 7, 5});
+    std::vector<int> structIds = ids({3, 5, 48, 48, 6, 4});
     std::vector<float> bboxes = {
         0.0f, 0.0f, 0.5f, 1.0f,
         0.5f, 0.0f, 1.0f, 1.0f,
     };
 
-    QList<DetectedCell> cells = TableStructureDetector::decodeStructure(structIds, bboxes, QSize(50, 50));
+    QList<DetectedCell> cells = TableStructureDetector::decodeStructure(structIds, bboxes, QSize(50, 50), 4, false);
     ASSERT_EQ(cells.size(), 2);
     EXPECT_EQ(cells[0].col, 0);
     EXPECT_EQ(cells[1].col, 1);
 }
 
-// 解码含 colspan="2" 的单元格，验证 span 与后续单元格列号。
+// 解码含 colspan="2"(10) 的单元格，验证 span 与后续单元格列号。
 TEST(ut_TableStructureDetector, decodeColspan)
 {
-    // <tbody><tr><td colspan="2"> <td></tr></tbody>
-    // 8:<td 11:colspan="2" 9:> 8:<td 9:>
-    std::vector<int> structIds = ids({4, 6, 8, 11, 9, 8, 9, 7, 5});
+    // <tbody><tr><td colspan="2"><td></tr></tbody>
+    std::vector<int> structIds = ids({3, 5, 7, 10, 8, 7, 8, 6, 4});
     std::vector<float> bboxes = {
         0.0f, 0.0f, 1.0f, 0.5f,
         0.0f, 0.5f, 1.0f, 1.0f,
     };
 
-    QList<DetectedCell> cells = TableStructureDetector::decodeStructure(structIds, bboxes, QSize(50, 50));
+    QList<DetectedCell> cells = TableStructureDetector::decodeStructure(structIds, bboxes, QSize(50, 50), 4, false);
     ASSERT_EQ(cells.size(), 2);
     EXPECT_EQ(cells[0].colSpan, 2);
     EXPECT_EQ(cells[0].col, 0);
-    EXPECT_EQ(cells[1].col, 2); // 第二个单元格跳过被 colspan 覆盖的列
+    EXPECT_EQ(cells[1].col, 2);
 }
 
-// 解码含 rowspan="2" 的单元格，验证跨行。
+// 解码含 rowspan="2"(29) 的单元格，验证跨行跳列。
 TEST(ut_TableStructureDetector, decodeRowspan)
 {
     // <tbody><tr><td rowspan="2"><td></tr><tr><td></tr></tbody>
-    // 8:<td 30:rowspan="2" 9:> 8:<td 9:> 7:</tr> 6:<tr> 8:<td 9:> 7:</tr>
-    std::vector<int> structIds = ids({4, 6, 8, 30, 9, 8, 9, 7, 6, 8, 9, 7, 5});
+    std::vector<int> structIds = ids({3, 5, 7, 29, 8, 7, 8, 6, 5, 7, 8, 6, 4});
     std::vector<float> bboxes = {
         0.0f, 0.0f, 0.5f, 1.0f,
         0.5f, 0.0f, 1.0f, 0.5f,
         0.5f, 0.5f, 1.0f, 1.0f,
     };
 
-    QList<DetectedCell> cells = TableStructureDetector::decodeStructure(structIds, bboxes, QSize(50, 50));
+    QList<DetectedCell> cells = TableStructureDetector::decodeStructure(structIds, bboxes, QSize(50, 50), 4, false);
     ASSERT_EQ(cells.size(), 3);
     EXPECT_EQ(cells[0].rowSpan, 2);
     EXPECT_EQ(cells[0].row, 0);
     EXPECT_EQ(cells[0].col, 0);
-    // 第二行的第一个单元格应跳过 col 0（被 rowspan 占用），落在 col 1。
+    EXPECT_EQ(cells[1].row, 0);
+    EXPECT_EQ(cells[1].col, 1);
+    // 第二行的单元格应跳过被 rowspan 覆盖的列 0，落在 col 1。
     EXPECT_EQ(cells[2].row, 1);
     EXPECT_EQ(cells[2].col, 1);
 }
@@ -107,14 +107,13 @@ TEST(ut_TableStructureDetector, decodeRowspan)
 TEST(ut_TableStructureDetector, decodeBboxStride8)
 {
     // <tbody><tr><td><td></tr></tbody>
-    std::vector<int> structIds = ids({4, 6, 8, 9, 8, 9, 7, 5});
-    // 2 个单元格，每个 8 个值（4 顶点：x1,y1,x2,y2,x3,y3,x4,y4）
+    std::vector<int> structIds = ids({3, 5, 7, 8, 7, 8, 6, 4});
     std::vector<float> bboxes = {
         0.0f, 0.0f, 0.5f, 0.0f, 0.5f, 0.5f, 0.0f, 0.5f,
         0.5f, 0.0f, 1.0f, 0.0f, 1.0f, 0.5f, 0.5f, 0.5f,
     };
 
-    QList<DetectedCell> cells = TableStructureDetector::decodeStructure(structIds, bboxes, QSize(100, 100), 8);
+    QList<DetectedCell> cells = TableStructureDetector::decodeStructure(structIds, bboxes, QSize(100, 100), 8, false);
     ASSERT_EQ(cells.size(), 2);
     EXPECT_FLOAT_EQ(cells[0].bbox.left(), 0.0f);
     EXPECT_FLOAT_EQ(cells[0].bbox.right(), 50.0f);

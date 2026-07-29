@@ -36,9 +36,7 @@ Build-Depends:
  portaudio19-dev,
  libv4l-dev,
  libncnn-dev,
- libopencv-mobile-dev,
- libonnxruntime-dev,
- libxlsxwriter-dev
+ libopencv-mobile-dev
 Standards-Version: 4.5.0
 
 Package: libdtk@DTK_VER@multimedia
@@ -70,23 +68,5 @@ Architecture: any
 Depends: ${misc:Depends}, libdtk@DTK_VER@ocr( =${binary:Version})
 Description: Development Tool Kit ocr devel library
  libdtk@DTK_VER@ocr-dev is base devel library of Deepin Qt/C++ applications.
- .
- This package contains the header files and static libraries.
-
-
-Package: libdtk@DTK_VER@tablerecognizer
-Architecture: any
-Depends: ${shlibs:Depends}, ${misc:Depends}
-Description: Development Tool Kit table recognizer library
- libdtk@DTK_VER@tablerecognizer recognizes tables in images (structure + OCR)
- and outputs HTML/Excel, fully offline.
- .
- This package contains the shared libraries.
-
-Package: libdtk@DTK_VER@tablerecognizer-dev
-Architecture: any
-Depends: ${misc:Depends}, libdtk@DTK_VER@tablerecognizer( =${binary:Version})
-Description: Development Tool Kit table recognizer devel library
- libdtk@DTK_VER@tablerecognizer-dev is base devel library of Deepin Qt/C++ applications.
  .
  This package contains the header files and static libraries.

@@ -37,12 +37,15 @@ public:
     // 结构 token id 序列 + bbox 浮点序列 -> DetectedCell 列表。
     // bboxStride 为每个单元格的浮点数个数（4 表示 [x1,y1,x2,y2]，
     // 8 表示 4 个多边形顶点 [x1,y1,x2,y2,x3,y3,x4,y4]）。
+    // bboxPerTimeStep 为 true 时按时间步索引 bbox（PaddleOCR SLANet 约定），
+    // 为 false 时按单元格计数器索引 bbox（单元测试约定）。
     static QList<DetectedCell> decodeStructure(const std::vector<int> &structureIds,
                                                const std::vector<float> &bboxes,
                                                const QSize &imageSize,
-                                               int bboxStride = 4);
+                                               int bboxStride = 4,
+                                               bool bboxPerTimeStep = false);
 
-    // 结构词表（50 tokens，从 ONNX 模型元数据提取，与模型导出一致）。
+    // 结构词表（50 tokens，与模型导出一致）。
     static QStringList vocabulary();
 
 private:

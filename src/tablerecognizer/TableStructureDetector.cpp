@@ -15,69 +15,74 @@ D_TABLERECOGNIZER_BEGIN_NAMESPACE
 
 namespace {
 
-// SLANet_plus 结构词表（50 tokens），从 ONNX 模型元数据 character 字段提取。
-// 索引即 token id；词表顺序与模型导出时一致。
+// SLANet_plus 结构词表（50 tokens）。
+// 词表顺序与 PaddleOCR TableLabelDecode.add_special_char 一致：
+//   [sos] + character_dict (48 entries) + [eos]
+// character_dict 从 ONNX 模型元数据 character 字段提取。
 const QStringList &vocab()
 {
     static const QStringList v = {
-        QStringLiteral("<sos>"),           // 0  — 序列起始
-        QStringLiteral("<eos>"),          // 1  — 序列结束
-        QStringLiteral("<thead>"),        // 2
-        QStringLiteral("</thead>"),       // 3
-        QStringLiteral("<tbody>"),        // 4
-        QStringLiteral("</tbody>"),       // 5
-        QStringLiteral("<tr>"),           // 6
-        QStringLiteral("</tr>"),          // 7
-        QStringLiteral("<td"),             // 8  — 单元格起始（无闭合 >）
-        QStringLiteral(">"),              // 9  — 闭合单元格属性
-        QStringLiteral("</td>"),          // 10
-        QStringLiteral(" colspan=\"2\""),  // 11
-        QStringLiteral(" colspan=\"3\""),  // 12
-        QStringLiteral(" colspan=\"4\""),  // 13
-        QStringLiteral(" colspan=\"5\""),  // 14
-        QStringLiteral(" colspan=\"6\""),  // 15
-        QStringLiteral(" colspan=\"7\""),  // 16
-        QStringLiteral(" colspan=\"8\""),  // 17
-        QStringLiteral(" colspan=\"9\""),  // 18
-        QStringLiteral(" colspan=\"10\""), // 19
-        QStringLiteral(" colspan=\"11\""), // 20
-        QStringLiteral(" colspan=\"12\""), // 21
-        QStringLiteral(" colspan=\"13\""), // 22
-        QStringLiteral(" colspan=\"14\""), // 23
-        QStringLiteral(" colspan=\"15\""), // 24
-        QStringLiteral(" colspan=\"16\""), // 25
-        QStringLiteral(" colspan=\"17\""), // 26
-        QStringLiteral(" colspan=\"18\""), // 27
-        QStringLiteral(" colspan=\"19\""), // 28
-        QStringLiteral(" colspan=\"20\""), // 29
-        QStringLiteral(" rowspan=\"2\""),  // 30
-        QStringLiteral(" rowspan=\"3\""),  // 31
-        QStringLiteral(" rowspan=\"4\""),  // 32
-        QStringLiteral(" rowspan=\"5\""),  // 33
-        QStringLiteral(" rowspan=\"6\""),  // 34
-        QStringLiteral(" rowspan=\"7\""),  // 35
-        QStringLiteral(" rowspan=\"8\""),  // 36
-        QStringLiteral(" rowspan=\"9\""),  // 37
-        QStringLiteral(" rowspan=\"10\""), // 38
-        QStringLiteral(" rowspan=\"11\""), // 39
-        QStringLiteral(" rowspan=\"12\""), // 40
-        QStringLiteral(" rowspan=\"13\""), // 41
-        QStringLiteral(" rowspan=\"14\""), // 42
-        QStringLiteral(" rowspan=\"15\""), // 43
-        QStringLiteral(" rowspan=\"16\""), // 44
-        QStringLiteral(" rowspan=\"17\""), // 45
-        QStringLiteral(" rowspan=\"18\""), // 46
-        QStringLiteral(" rowspan=\"19\""), // 47
-        QStringLiteral(" rowspan=\"20\""), // 48
-        QStringLiteral("<td></td>"),       // 49 — 自闭合空单元格
+        QStringLiteral("<sos>"),           // 0  — 序列起始（PaddleOCR beg_str）
+        QStringLiteral("<thead>"),         // 1
+        QStringLiteral("</thead>"),        // 2
+        QStringLiteral("<tbody>"),         // 3
+        QStringLiteral("</tbody>"),        // 4
+        QStringLiteral("<tr>"),            // 5
+        QStringLiteral("</tr>"),           // 6
+        QStringLiteral("<td"),             // 7  — 单元格起始（需 > 闭合）
+        QStringLiteral(">"),               // 8  — 闭合单元格属性
+        QStringLiteral("</td>"),           // 9
+        QStringLiteral(" colspan=\"2\""),  // 10
+        QStringLiteral(" colspan=\"3\""),  // 11
+        QStringLiteral(" colspan=\"4\""),  // 12
+        QStringLiteral(" colspan=\"5\""),  // 13
+        QStringLiteral(" colspan=\"6\""),  // 14
+        QStringLiteral(" colspan=\"7\""),  // 15
+        QStringLiteral(" colspan=\"8\""),  // 16
+        QStringLiteral(" colspan=\"9\""),  // 17
+        QStringLiteral(" colspan=\"10\""), // 18
+        QStringLiteral(" colspan=\"11\""), // 19
+        QStringLiteral(" colspan=\"12\""), // 20
+        QStringLiteral(" colspan=\"13\""), // 21
+        QStringLiteral(" colspan=\"14\""), // 22
+        QStringLiteral(" colspan=\"15\""), // 23
+        QStringLiteral(" colspan=\"16\""), // 24
+        QStringLiteral(" colspan=\"17\""), // 25
+        QStringLiteral(" colspan=\"18\""), // 26
+        QStringLiteral(" colspan=\"19\""), // 27
+        QStringLiteral(" colspan=\"20\""), // 28
+        QStringLiteral(" rowspan=\"2\""),  // 29
+        QStringLiteral(" rowspan=\"3\""),  // 30
+        QStringLiteral(" rowspan=\"4\""),  // 31
+        QStringLiteral(" rowspan=\"5\""),  // 32
+        QStringLiteral(" rowspan=\"6\""),  // 33
+        QStringLiteral(" rowspan=\"7\""),  // 34
+        QStringLiteral(" rowspan=\"8\""),  // 35
+        QStringLiteral(" rowspan=\"9\""),  // 36
+        QStringLiteral(" rowspan=\"10\""), // 37
+        QStringLiteral(" rowspan=\"11\""), // 38
+        QStringLiteral(" rowspan=\"12\""), // 39
+        QStringLiteral(" rowspan=\"13\""), // 40
+        QStringLiteral(" rowspan=\"14\""), // 41
+        QStringLiteral(" rowspan=\"15\""), // 42
+        QStringLiteral(" rowspan=\"16\""), // 43
+        QStringLiteral(" rowspan=\"17\""), // 44
+        QStringLiteral(" rowspan=\"18\""), // 45
+        QStringLiteral(" rowspan=\"19\""), // 46
+        QStringLiteral(" rowspan=\"20\""), // 47
+        QStringLiteral("<td></td>"),       // 48 — 自闭合空单元格
+        QStringLiteral("<eos>"),           // 49 — 序列结束（PaddleOCR end_str）
     };
     return v;
 }
 
-// colspan token id → span 值（id 11..29 → span 2..20）。
-inline int colspanFromId(int id) { return id - 9; }
-// rowspan token id → span 值（id 30..48 → span 2..20）。
-inline int rowspanFromId(int id) { return id - 28; }
+// colspan token id → span 值（id 10..28 → span 2..20）。
+inline int colspanFromId(int id) { return id - 8; }
+// rowspan token id → span 值（id 29..47 → span 2..20）。
+inline int rowspanFromId(int id) { return id - 27; }
+
+// 单元格起始 token id 集合：<td (7) 和 <td></td> (48)。
+inline bool isCellToken(int id) { return id == 7 || id == 48; }
 
 } // namespace
 
@@ -170,6 +175,13 @@ bool TableStructureDetector::detect(const QImage &image, QList<DetectedCell> &ce
             bboxStride = s;
     }
 
+    // 判断 bbox 是否按时间步排列（PaddleOCR SLANet 中 bbox 输出与结构序列等长）。
+    bool bboxPerTimeStep = false;
+    if (T > 0 && bboxStride > 0) {
+        const size_t bboxCount = bboxOut.size() / size_t(bboxStride);
+        bboxPerTimeStep = (bboxCount == T);
+    }
+
     // 结构 token：按 [T, V] 逐时间步 argmax。
     std::vector<int> structIds;
     if (V > 0 && T > 0) {
@@ -192,24 +204,25 @@ bool TableStructureDetector::detect(const QImage &image, QList<DetectedCell> &ce
         return false;
     }
 
-    // 遇到 <eos>（id=1）提前截断（SLANet 输出含填充）。
-    const int eosId = 1;
+    // 遇到 <eos>（id=49）提前截断（SLANet 输出含填充）。
+    const int eosId = 49;
     auto eosIt = std::find(structIds.begin(), structIds.end(), eosId);
     if (eosIt != structIds.end())
         structIds.erase(eosIt + 1, structIds.end());
 
-    cells = decodeStructure(structIds, bboxOut, image.size(), bboxStride);
+    cells = decodeStructure(structIds, bboxOut, image.size(), bboxStride, bboxPerTimeStep);
     if (cells.isEmpty()) {
         qWarning() << "TableStructureDetector: decodeStructure returned 0 cells."
                    << "structIds count =" << structIds.size()
                    << "bboxOut count =" << bboxOut.size()
                    << "V =" << V << "T =" << T << "bboxStride =" << bboxStride
+                   << "bboxPerTimeStep =" << bboxPerTimeStep
                    << "structIdx =" << structIdx << "bboxIdx =" << bboxIdx;
-        // 打印前 30 个 token id 辅助排查。
+        // 打印前 50 个 token id 辅助排查。
         QString idsStr;
-        for (size_t i = 0; i < structIds.size() && i < 30; ++i)
+        for (size_t i = 0; i < structIds.size() && i < 50; ++i)
             idsStr += QString::number(structIds[i]) + QLatin1Char(' ');
-        qWarning() << "TableStructureDetector: first 30 structIds:" << idsStr;
+        qWarning() << "TableStructureDetector: first 50 structIds:" << idsStr;
         error = QStringLiteral("未识别到表格（结构解码无单元格）");
         return false;
     }
@@ -253,7 +266,8 @@ std::vector<float> TableStructureDetector::preprocess(const QImage &image, int i
 QList<DetectedCell> TableStructureDetector::decodeStructure(const std::vector<int> &structureIds,
                                                             const std::vector<float> &bboxes,
                                                             const QSize &imageSize,
-                                                            int bboxStride)
+                                                            int bboxStride,
+                                                            bool bboxPerTimeStep)
 {
     const QStringList &v = vocab();
     const int V = v.size();
@@ -264,8 +278,11 @@ QList<DetectedCell> TableStructureDetector::decodeStructure(const std::vector<in
     int row = 0;
     int col = 0;
     // spanRows[c] = 该列还被上方 rowspan 占用的行数。
+    // 设为 rowSpan（而非 rowSpan-1），因为 advanceRow 会递减一次：
+    // 若 rowSpan=2，emitCell 设 spanRows[c]=2，advanceRow 后变为 1（下一行仍被占用），
+    // 再 advanceRow 后变为 0（释放）。这保证跨行单元格在所有占用行中都被跳过。
     QMap<int, int> spanRows;
-    int cellIndex = 0;
+    int cellIndex = 0;       // 单元格计数器（当 bbox 非按时间步排列时使用）
     bool inTd = false;       // 正在累积 <td ...> 属性
     int pendingColSpan = 1;
     int pendingRowSpan = 1;
@@ -283,7 +300,7 @@ QList<DetectedCell> TableStructureDetector::decodeStructure(const std::vector<in
         col = 0;
     };
 
-    auto emitCell = [&](int rowSpan, int colSpan) {
+    auto emitCell = [&](int rowSpan, int colSpan, int timeStep) {
         // 跳过被上方 rowspan 覆盖的列。
         while (spanRows.value(col, 0) > 0)
             ++col;
@@ -295,8 +312,10 @@ QList<DetectedCell> TableStructureDetector::decodeStructure(const std::vector<in
         cell.rowSpan = rowSpan;
         cell.colSpan = colSpan;
 
-        if (size_t(cellIndex + 1) * size_t(bboxStride) <= bboxes.size()) {
-            const size_t bi = size_t(cellIndex) * size_t(bboxStride);
+        // bbox 索引：若按时间步排列则用 timeStep，否则用 cellIndex。
+        const int bboxIdxVal = bboxPerTimeStep ? timeStep : cellIndex;
+        if (bboxIdxVal >= 0 && size_t(bboxIdxVal + 1) * size_t(bboxStride) <= bboxes.size()) {
+            const size_t bi = size_t(bboxIdxVal) * size_t(bboxStride);
             if (bboxStride >= 8) {
                 // 4 多边形顶点: (x1,y1),(x2,y2),(x3,y3),(x4,y4)
                 float xs[4] = {bboxes[bi], bboxes[bi + 2], bboxes[bi + 4], bboxes[bi + 6]};
@@ -315,7 +334,7 @@ QList<DetectedCell> TableStructureDetector::decodeStructure(const std::vector<in
 
         for (int c = startCol; c < startCol + colSpan; ++c) {
             if (rowSpan > 1)
-                spanRows[c] = rowSpan - 1;
+                spanRows[c] = rowSpan;  // 设置占用行数（含当前行）
             else
                 spanRows.remove(c);
         }
@@ -332,21 +351,21 @@ QList<DetectedCell> TableStructureDetector::decodeStructure(const std::vector<in
         if (inTd) {
             // 累积属性直到 ">" 闭合。
             if (tok == QStringLiteral(">")) {
-                emitCell(pendingRowSpan, pendingColSpan);
+                emitCell(pendingRowSpan, pendingColSpan, int(i));
                 pendingColSpan = 1;
                 pendingRowSpan = 1;
                 inTd = false;
             } else if (tok == QStringLiteral("</td>")) {
                 // 容错：属性未闭合但遇到 </td>，按已收集属性闭合。
-                emitCell(pendingRowSpan, pendingColSpan);
+                emitCell(pendingRowSpan, pendingColSpan, int(i));
                 pendingColSpan = 1;
                 pendingRowSpan = 1;
                 inTd = false;
-            } else if (id >= 11 && id <= 29) {
-                // colspan [REDACTED CREDENTIAL] = id - 9
+            } else if (id >= 10 && id <= 28) {
+                // colspan [REDACTED CREDENTIAL] = id - 8
                 pendingColSpan = colspanFromId(id);
-            } else if (id >= 30 && id <= 48) {
-                // rowspan [REDACTED CREDENTIAL] = id - 28
+            } else if (id >= 29 && id <= 47) {
+                // rowspan [REDACTED CREDENTIAL] = id - 27
                 pendingRowSpan = rowspanFromId(id);
             }
             continue;
@@ -362,14 +381,14 @@ QList<DetectedCell> TableStructureDetector::decodeStructure(const std::vector<in
             pendingRowSpan = 1;
         } else if (tok == QStringLiteral("<td></td>")) {
             // 自闭合空单元格。
-            emitCell(1, 1);
+            emitCell(1, 1, int(i));
         }
         // 其它 token（<sos>/<eos>/<thead>/</thead>/<tbody>/</tbody>/</td>）忽略。
     }
 
     // 容错：流结束时仍在累积属性，按已收集属性闭合。
     if (inTd) {
-        emitCell(pendingRowSpan, pendingColSpan);
+        emitCell(pendingRowSpan, pendingColSpan, int(structureIds.size() - 1));
     }
 
     // 归一化 bbox（0~1）缩放到原图尺寸。

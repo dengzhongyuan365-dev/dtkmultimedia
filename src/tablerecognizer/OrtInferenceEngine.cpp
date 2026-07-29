@@ -8,13 +8,18 @@
 
 #include <QDebug>
 #include <QFileInfo>
+#include <cstdio>
+#include <unistd.h>
 
 D_TABLERECOGNIZER_BEGIN_NAMESPACE
 
 class OrtInferenceEngine::Impl
 {
 public:
-    Ort::Env env{ORT_LOGGING_LEVEL_WARNING, "dtk6tablerecognizer"};
+    // 使用 FATAL 级别抑制 ORT 运行时日志。
+    // ONNX schema 重复注册告警来自底层 onnx 库（输出到 stderr），
+    // 需在创建 Session 时临时重定向 stderr（见 loadModel）。
+    Ort::Env env{ORT_LOGGING_LEVEL_FATAL, "dtk6tablerecognizer"};
     std::unique_ptr<Ort::Session> session;
     Ort::AllocatorWithDefaultOptions allocator;
     QStringList inputNames;
@@ -50,10 +55,28 @@ bool OrtInferenceEngine::loadModel(const QString &modelPath)
 
     try {
         Ort::SessionOptions sessionOptions;
-        // 抑制 ONNX schema 重复注册的刷屏日志（ORT_LOGGING_LEVEL_FATAL=4）。
         sessionOptions.SetLogSeverityLevel(4);
+
+        // 临时重定向 stderr 到 /dev/null，抑制 ONNX schema 重复注册告警。
+        // 这些告警由底层 onnx 库在 Session 构造时直接输出到 stderr，
+        // 不受 ORT 日志级别控制（SetLogSeverityLevel 仅影响 ORT 自身日志）。
+        fflush(stderr);
+        const int savedStderr = dup(fileno(stderr));
+        FILE *devnull = fopen("/dev/null", "w");
+        if (devnull)
+            dup2(fileno(devnull), fileno(stderr));
+
         d->session = std::make_unique<Ort::Session>(d->env, modelPath.toUtf8().constData(),
                                                     sessionOptions);
+
+        // 恢复 stderr。
+        fflush(stderr);
+        if (devnull) {
+            fclose(devnull);
+            dup2(savedStderr, fileno(stderr));
+        }
+        close(savedStderr);
+
         const size_t inCount = d->session->GetInputCount();
         for (size_t i = 0; i < inCount; ++i) {
             auto name = d->session->GetInputNameAllocated(i, d->allocator);
