@@ -46,6 +46,14 @@ DTableRecognizer::DTableRecognizer(QObject *parent)
     Q_D(DTableRecognizer);
     d->ortEngine.reset(new OrtInferenceEngine);
     d->detector.reset(new TableStructureDetector(d->ortEngine.data()));
+    // 初始化时加载主模型 SLANet_plus.onnx，使主路径（ORT 推理）可用。
+    // 加载失败时记录错误，自动降级到 img2table（现有降级逻辑保留）。
+    const QString modelPath = defaultModelPath();
+    if (!d->ortEngine->loadModel(modelPath)) {
+        qCWarning(lcTableRecognizer) << "Failed to load SLANet_plus model at" << modelPath
+                                     << ":" << d->ortEngine->lastError()
+                                     << "(will fall back to img2table)";
+    }
 }
 
 DTableRecognizer::~DTableRecognizer()
