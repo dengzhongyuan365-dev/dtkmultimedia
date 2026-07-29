@@ -68,7 +68,7 @@ add_executable(${BIN_NAME}
     )
 
 # 找到基础模块
-find_package(Qt${QT_VERSION_MAJOR} REQUIRED COMPONENTS Core Widgets DBus LinguistTools Network Concurrent Multimedia MultimediaWidgets OpenGL)
+find_package(Qt${QT_VERSION_MAJOR} REQUIRED COMPONENTS Core Widgets DBus LinguistTools Network Concurrent Multimedia MultimediaWidgets OpenGL Test)
 find_package(Dtk${DTK_VERSION_MAJOR} REQUIRED COMPONENTS Core Widget)
 
 # 根据Qt版本处理OpenGLWidgets
@@ -98,6 +98,7 @@ set(TARGET_LIBS Xtst
     Qt${QT_VERSION_MAJOR}::MultimediaWidgets
     Qt${QT_VERSION_MAJOR}::Concurrent
     Qt${QT_VERSION_MAJOR}::OpenGL
+    Qt${QT_VERSION_MAJOR}::Test
     PkgConfig::Gst
     GL dl
     dtk${DTK_VERSION_MAJOR}multimedia
