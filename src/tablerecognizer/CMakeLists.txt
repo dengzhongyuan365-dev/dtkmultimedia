@@ -2,18 +2,15 @@
 #
 # SPDX-License-Identifier: LGPL-3.0-or-later
 
-# Phase 0 骨架：仅编译 OrtInferenceEngine + TableStructureDetector，链接 onnxruntime + Qt Core/Gui。
-# 越界（Phase 1/2）项已裁掉：opencv_mobile/xlsxwriter/dtk6ocr 链接、
-# pkgconfig/cmake/pri 模板、整库 install。
-
 set(BIN_NAME dtk${DTK_VERSION_MAJOR}tablerecognizer)
 
 file(GLOB_RECURSE INSTALL_INCLUDE_FILES "../../include/dtktablerecognizer/*")
+file(GLOB_RECURSE INCLUDE_FILES "./*.h")
 file(GLOB_RECURSE SRCS "./*.h" "./*.cpp")
 
 include_directories(../../include/dtktablerecognizer)
 
-find_package(Qt${QT_VERSION_MAJOR} REQUIRED COMPONENTS Core Gui)
+find_package(Qt${QT_VERSION_MAJOR} REQUIRED COMPONENTS Core Gui Concurrent)
 find_package(PkgConfig REQUIRED)
 
 # ===== onnxruntime 查找策略（三架构统一）=====
@@ -55,8 +52,18 @@ if(NOT _ORT_FOUND)
 endif()
 mark_as_advanced(ORT_INCLUDE_DIR ORT_LIBRARY)
 
+# opencv_mobile（降级/预处理）为 Phase 1 必需依赖。
+pkg_check_modules(OpenCVMobile IMPORTED_TARGET opencv_mobile)
+if(NOT OpenCVMobile_FOUND)
+    message(FATAL_ERROR
+        "dtk${DTK_VERSION_MAJOR}tablerecognizer: opencv_mobile is mandatory and not found. "
+        "Install opencv-mobile dev package, or pass -DDTK_ENABLE_TABLERECOGNIZER=OFF to skip "
+        "this sub-library.")
+endif()
+
 add_library(${BIN_NAME} SHARED
     ${INSTALL_INCLUDE_FILES}
+    ${INCLUDE_FILES}
     ${SRCS}
 )
 
@@ -71,9 +78,15 @@ target_compile_definitions(${BIN_NAME} PRIVATE
 target_include_directories(${BIN_NAME} PUBLIC
     ${CMAKE_CURRENT_LIST_DIR}/../../include/dtktablerecognizer)
 
+# 复用 libdtk6ocr 公开 API（DOcr），不修改其源码。
+# dtk6ocr 目标未通过 INTERFACE_INCLUDE_DIRECTORIES 导出头文件路径，需显式添加。
+target_include_directories(${BIN_NAME} PRIVATE ${CMAKE_CURRENT_LIST_DIR}/../../include/dtkocr)
 target_link_libraries(${BIN_NAME}
     PUBLIC Qt${QT_VERSION_MAJOR}::Core Qt${QT_VERSION_MAJOR}::Gui
-    PRIVATE Ort::Runtime)
+    PRIVATE Ort::Runtime
+    Qt${QT_VERSION_MAJOR}::Concurrent
+    dtk${DTK_VERSION_MAJOR}ocr
+    PkgConfig::OpenCVMobile)
 
 # 模型随包分发路径（Debug 指向源码 models/，Release 指向 share 路径）。
 set(ModelSaveSubDir models)
