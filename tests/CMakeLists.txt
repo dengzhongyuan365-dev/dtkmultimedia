@@ -20,10 +20,6 @@ file(GLOB_RECURSE SRCS
     )
 file(GLOB_RECURSE TEST_FILES "./*.h" "./*.cpp")
 
-# Phase 0 表格结构检测单测由独立的 ut-tablerecognizer 目标构建（见文件末尾），
-# 从 ut-dtkmultimedia glob 中剔除，避免在未编译 tablerecognizer 源码时产生未定义符号。
-list(FILTER TEST_FILES EXCLUDE REGEX "ut_ortinferenceengine|ut_tablestructuredetector")
-
 include_directories(
     "../include/dtkmultimedia"
     "../include/dtkmultimediawidgets"
@@ -41,6 +37,21 @@ include_directories(../src/multimediawidgets/engine/plugin/ffmpeg)
 include_directories(../src/multimediawidgets/engine/plugin/gstreamer)
 include_directories(../src/ocr/ppocr)
 
+# tablerecognizer 测试硬依赖 libonnxruntime + opencv_mobile。
+pkg_check_modules(TABLEREC IMPORTED_TARGET libonnxruntime opencv_mobile)
+if(TABLEREC_FOUND)
+    file(GLOB_RECURSE TABLEREC_SRCS
+        "../src/tablerecognizer/*.h"
+        "../src/tablerecognizer/*.cpp")
+    list(APPEND SRCS ${TABLEREC_SRCS})
+    include_directories("../src/tablerecognizer")
+    include_directories("../include/dtktablerecognizer")
+else()
+    list(FILTER TEST_FILES EXCLUDE REGEX
+        "ut_celltextmapper|ut_htmltablebuilder|ut_ortinferenceengine|ut_tablestructuredetector|ut_img2tablefallback|ut_dtablerecognizer")
+    message(STATUS "tablerecognizer tests skipped: libonnxruntime/opencv_mobile dev packages not found")
+endif()
+
 add_executable(${BIN_NAME}
     ${INCLUDE_FILES}
     ${SRCS}
@@ -49,7 +60,7 @@ add_executable(${BIN_NAME}
     )
 
 # 找到基础模块
-find_package(Qt${QT_VERSION_MAJOR} REQUIRED COMPONENTS Core Widgets DBus LinguistTools Network Concurrent Multimedia MultimediaWidgets OpenGL)
+find_package(Qt${QT_VERSION_MAJOR} REQUIRED COMPONENTS Core Widgets DBus LinguistTools Network Concurrent Multimedia MultimediaWidgets OpenGL Test)
 find_package(Dtk${DTK_VERSION_MAJOR} REQUIRED COMPONENTS Core Widget)
 
 # 根据Qt版本处理OpenGLWidgets
@@ -79,6 +90,7 @@ set(TARGET_LIBS Xtst
     Qt${QT_VERSION_MAJOR}::MultimediaWidgets
     Qt${QT_VERSION_MAJOR}::Concurrent
     Qt${QT_VERSION_MAJOR}::OpenGL
+    Qt${QT_VERSION_MAJOR}::Test
     PkgConfig::Gst
     GL dl
     dtk${DTK_VERSION_MAJOR}multimedia
@@ -88,7 +100,10 @@ set(TARGET_LIBS Xtst
 if(${QT_VERSION_MAJOR} EQUAL 6)
     list(APPEND TARGET_LIBS Qt${QT_VERSION_MAJOR}::OpenGLWidgets)
 endif()
-
+# tablerecognizer 依赖须在 set(TARGET_LIBS) 之后追加，否则被整体覆盖（见 AI 初审 Medium 项）。
+if(TABLEREC_FOUND)
+    list(APPEND TARGET_LIBS PkgConfig::TABLEREC)
+endif()
 list(APPEND PROJECT_INCLUDE /usr/include/glib-2.0 /usr/include/gstreamer-1.0)
 
 target_include_directories(${BIN_NAME} PUBLIC
@@ -136,35 +151,3 @@ ADD_DEFINITIONS(-DOCR_MODEL_DIR="${CMAKE_CURRENT_LIST_DIR}/../src/ocr/${ModelSav
 add_subdirectory(ocrplugin)
 
 add_test(NAME ${BIN_NAME} COMMAND ${BIN_NAME})
-
-
-# ===== Phase 0: 表格结构检测单元测试（独立可验证子集）=====
-# 门控 dtk6tablerecognizer 目标（即 onnxruntime 可用）；仅接 ut_ortinferenceengine +
-# ut_tablestructuredetector。其余 5 个 tablerecognizer 测试属 Phase 1，本阶段不引入。
-if(TARGET dtk${DTK_VERSION_MAJOR}tablerecognizer)
-    set(UT_TR_NAME ut-tablerecognizer)
-    add_executable(${UT_TR_NAME}
-        ut_ortinferenceengine.cpp
-        ut_tablestructuredetector.cpp)
-    target_include_directories(${UT_TR_NAME} PRIVATE
-        ${CMAKE_CURRENT_LIST_DIR}/../src/tablerecognizer
-        ${CMAKE_CURRENT_LIST_DIR}/../include/dtktablerecognizer)
-    find_package(GTest)
-    if(GTest_FOUND)
-        set(UT_TR_GTEST GTest::gtest GTest::gtest_main)
-    else()
-        set(UT_TR_GTEST gtest gtest_main)
-    endif()
-    target_link_libraries(${UT_TR_NAME} PRIVATE
-        dtk${DTK_VERSION_MAJOR}tablerecognizer
-        Qt${QT_VERSION_MAJOR}::Core
-        Qt${QT_VERSION_MAJOR}::Gui
-        ${UT_TR_GTEST}
-        pthread)
-    add_test(NAME ${UT_TR_NAME} COMMAND ${UT_TR_NAME})
-else()
-    message(STATUS "ut-tablerecognizer skipped: dtk${DTK_VERSION_MAJOR}tablerecognizer not built (onnxruntime unavailable)")
-endif()
-
-# Phase 0 TEDS 基准 harness（验证/记录工具）。
-add_subdirectory(benchmarks)
