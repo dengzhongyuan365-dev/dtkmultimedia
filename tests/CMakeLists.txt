@@ -19,6 +19,7 @@ file(GLOB_RECURSE SRCS
     "${INCLUDE_FILES}"
     )
 file(GLOB_RECURSE TEST_FILES "./*.h" "./*.cpp")
+list(FILTER TEST_FILES EXCLUDE REGEX "benchmarks/")
 
 include_directories(
     "../include/dtkmultimedia"
