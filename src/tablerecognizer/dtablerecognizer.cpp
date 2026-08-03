@@ -100,12 +100,21 @@ void DTableRecognizerPrivate::start(const QImage &image, std::chrono::millisecon
 
     timedOut.storeRelease(0);
     emitted.storeRelease(0);
+    // 递增任务版本号：本次调用的唯一标识，用于过滤过期定时器/工作线程回调。
+    // 场景：任务 A 工作线程提前完成并释放 busy 后，任务 B 进入重置 emitted；
+    // 此时任务 A 的超时定时器仍可能触发——通过 taskId 比对丢弃过期定时器，
+    // 避免向任务 B 错误投递超时结果。
+    const int myTaskId = taskId.fetchAndAddRelease(1) + 1;
 
     QImage imageCopy = image.copy();
     auto deadline = std::chrono::steady_clock::now() + timeout;
 
-    // 超时定时器：到点置标志，若工作尚未完成则下发超时失败结果。
-    QTimer::singleShot(std::chrono::duration_cast<std::chrono::milliseconds>(timeout).count(), this, [this]() {
+    // 超时定时器：到点仅置标志并尝试投递超时结果，**不释放 busy 锁**——
+    // busy 锁的释放统一由工作线程在完全退出时负责。这避免了超时释放 busy 后
+    // 旧工作线程仍在运行、新任务进入重置 emitted、旧线程投递过期结果的竞态。
+    QTimer::singleShot(std::chrono::duration_cast<std::chrono::milliseconds>(timeout).count(), this, [this, myTaskId]() {
+        if (myTaskId != taskId.loadAcquire())
+            return;   // 已被新任务取代，丢弃过期定时器。
         timedOut.storeRelease(1);
         if (emitted.testAndSetAcquire(0, 1)) {
             DTableResult result;
@@ -113,18 +122,18 @@ void DTableRecognizerPrivate::start(const QImage &image, std::chrono::millisecon
             result.errorMessage = QStringLiteral("识别超时");
             Q_Q(DTableRecognizer);
             QMetaObject::invokeMethod(q, [this, result]() {
-                busy.storeRelease(0);   // 回到 Idle。
                 emit q_ptr->recognitionDone(result);
             }, Qt::QueuedConnection);
         }
     });
 
-    QFuture<void> future = QtConcurrent::run(QThreadPool::globalInstance(), [this, imageCopy, deadline]() {
+    QFuture<void> future = QtConcurrent::run(QThreadPool::globalInstance(), [this, imageCopy, deadline, myTaskId]() {
         DTableResult result = runPipeline(std::move(imageCopy), deadline);
         Q_Q(DTableRecognizer);
-        QMetaObject::invokeMethod(q, [this, result]() {
-            busy.storeRelease(0);   // 回到 Idle。
-            if (emitted.testAndSetAcquire(0, 1))
+        QMetaObject::invokeMethod(q, [this, result, myTaskId]() {
+            busy.storeRelease(0);   // 唯一释放点：工作线程完全退出时回到 Idle。
+            // 仅当前任务有效且尚未投递结果时才发射，过滤过期（被新任务取代）的结果。
+            if (myTaskId == taskId.loadAcquire() && emitted.testAndSetAcquire(0, 1))
                 emit q_ptr->recognitionDone(result);
         }, Qt::QueuedConnection);
     });

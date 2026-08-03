@@ -51,6 +51,7 @@ public:
     QAtomicInt timedOut{0};
     QAtomicInt emitted{0};
     QAtomicInt busy{0};             // 单飞守卫（0=Idle, 1=Running）
+    QAtomicInt taskId{0};           // 递增任务版本号，过滤过期定时器/工作线程结果
     QFutureWatcher<void> watcher;   // 析构时等待在途任务完成
 
     Q_DISABLE_COPY(DTableRecognizerPrivate)
