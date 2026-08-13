@@ -49,7 +49,7 @@ if(TABLEREC_FOUND)
     include_directories("../include/dtktablerecognizer")
 else()
     list(FILTER TEST_FILES EXCLUDE REGEX
-        "ut_celltextmapper|ut_htmltablebuilder|ut_ortinferenceengine|ut_tablestructuredetector|ut_img2tablefallback|ut_dtablerecognizer")
+        "ut_celltextmapper|ut_htmltablebuilder|ut_ortinferenceengine|ut_tablestructuredetector|ut_img2tablefallback|ut_dtablerecognizer|ut_wirelesstableheuristic")
     message(STATUS "tablerecognizer tests skipped: libonnxruntime/opencv_mobile dev packages not found")
 endif()
 
