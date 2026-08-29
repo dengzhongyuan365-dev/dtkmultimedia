@@ -21,6 +21,7 @@
 #include <QThreadPool>
 #include <QLoggingCategory>
 #include <algorithm>
+#include <chrono>
 
 D_TABLERECOGNIZER_BEGIN_NAMESPACE
 
@@ -157,9 +158,16 @@ DTableResult DTableRecognizerPrivate::runPipeline(QImage image,
     DTableResult result;
     result.success = false;
 
-    const auto now = std::chrono::steady_clock::now();
+    // Stage 2 速度测试：计时累加器（毫秒）。
+    qint64 structureMsAccum = 0;
+    qint64 ocrMsAccum = 0;
+
+    const auto pipelineStart = std::chrono::steady_clock::now();
+    const auto now = pipelineStart;
     if (now > deadline) {
         result.errorMessage = QStringLiteral("识别超时");
+        result.totalMs = std::chrono::duration_cast<std::chrono::milliseconds>(
+            std::chrono::steady_clock::now() - pipelineStart).count();
         return result;
     }
 
@@ -170,7 +178,10 @@ DTableResult DTableRecognizerPrivate::runPipeline(QImage image,
     bool structOk = false;
     const bool modelRan = detector && detector->available();
     if (modelRan) {
+        const auto t0 = std::chrono::steady_clock::now();
         structOk = detector->detect(image, cells, error, &slanetConfidence);
+        structureMsAccum += std::chrono::duration_cast<std::chrono::milliseconds>(
+            std::chrono::steady_clock::now() - t0).count();
         if (!structOk)
             qCWarning(lcTableRecognizer) << "Main path (SLANet_plus) detect failed:" << error
                                           << "— will try quality path";
@@ -184,13 +195,15 @@ DTableResult DTableRecognizerPrivate::runPipeline(QImage image,
     QList<OcrTextBox> ocrBoxes;
     bool ocrDone = false;
     if (modelRan) {
+        const auto t0 = std::chrono::steady_clock::now();
         if (ocr.recognize(image, ocrBoxes, error)) {
             ocrDone = true;
         } else {
             qCWarning(lcTableRecognizer) << "OCR for consistency check failed:" << error;
         }
+        ocrMsAccum += std::chrono::duration_cast<std::chrono::milliseconds>(
+            std::chrono::steady_clock::now() - t0).count();
     }
-
     // H3 v3：结构-内容一致性信号——SLANet 预测列数 vs OCR 文本框列簇数。
     // 仪表化：逐张打印真实置信度、SLANet 列数、OCR 列簇数、线密度、路由结果（为 Step 2 采数据）。
     int slanetCols = 0;
@@ -248,27 +261,44 @@ DTableResult DTableRecognizerPrivate::runPipeline(QImage image,
         cells.clear();
         bool gotStructure = false;
         if (useWireless) {
+            const auto t0 = std::chrono::steady_clock::now();
             if (wireless.build(image.size(), ocrBoxes, cells, error) && !cells.isEmpty()) {
                 result.source = QStringLiteral("wireless");
                 gotStructure = true;
             } else {
                 qCWarning(lcTableRecognizer) << "Wireless heuristic failed:" << error;
             }
+            structureMsAccum += std::chrono::duration_cast<std::chrono::milliseconds>(
+                std::chrono::steady_clock::now() - t0).count();
         }
         if (!gotStructure) {
             // 有线降级：img2table（霍夫线检测）。
+            const auto t0 = std::chrono::steady_clock::now();
             if (fallback.detect(image, cells, error)) {
+                structureMsAccum += std::chrono::duration_cast<std::chrono::milliseconds>(
+                    std::chrono::steady_clock::now() - t0).count();
                 if (cells.isEmpty()) {
                     result.success = false;
                     result.errorMessage = QStringLiteral("未识别到表格");
+                    result.structureMs = structureMsAccum;
+                    result.ocrMs = ocrMsAccum;
+                    result.totalMs = std::chrono::duration_cast<std::chrono::milliseconds>(
+                        std::chrono::steady_clock::now() - pipelineStart).count();
                     return result;
                 }
                 result.source = QStringLiteral("img2table");
                 gotStructure = true;
+            } else {
+                structureMsAccum += std::chrono::duration_cast<std::chrono::milliseconds>(
+                    std::chrono::steady_clock::now() - t0).count();
             }
         }
         if (!gotStructure) {
             result.errorMessage = error.isEmpty() ? QStringLiteral("未识别到表格") : error;
+            result.structureMs = structureMsAccum;
+            result.ocrMs = ocrMsAccum;
+            result.totalMs = std::chrono::duration_cast<std::chrono::milliseconds>(
+                std::chrono::steady_clock::now() - pipelineStart).count();
             return result;
         }
     } else {
@@ -282,10 +312,19 @@ DTableResult DTableRecognizerPrivate::runPipeline(QImage image,
 
     // 阶段3：OCR 文字识别（若模型缺失或早期 OCR 失败，此处补做；按详细设计 OCR 失败置 success=false）。
     if (!ocrDone) {
+        const auto t0 = std::chrono::steady_clock::now();
         if (!ocr.recognize(image, ocrBoxes, error)) {
+            ocrMsAccum += std::chrono::duration_cast<std::chrono::milliseconds>(
+                std::chrono::steady_clock::now() - t0).count();
             result.errorMessage = QStringLiteral("OCR 失败：%1").arg(error);
+            result.structureMs = structureMsAccum;
+            result.ocrMs = ocrMsAccum;
+            result.totalMs = std::chrono::duration_cast<std::chrono::milliseconds>(
+                std::chrono::steady_clock::now() - pipelineStart).count();
             return result;
         }
+        ocrMsAccum += std::chrono::duration_cast<std::chrono::milliseconds>(
+            std::chrono::steady_clock::now() - t0).count();
         ocrDone = true;
     }
     // 将 OCR 文本框映射到单元格。
@@ -310,6 +349,10 @@ DTableResult DTableRecognizerPrivate::runPipeline(QImage image,
 
     result.cells = publicCells;
     result.success = true;
+    result.structureMs = structureMsAccum;
+    result.ocrMs = ocrMsAccum;
+    result.totalMs = std::chrono::duration_cast<std::chrono::milliseconds>(
+        std::chrono::steady_clock::now() - pipelineStart).count();
     return result;
 }
 
